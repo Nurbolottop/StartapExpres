@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     'apps.tracking',
     'apps.routes',
     'apps.shipments',
+    'apps.gps',
 ]
 
 # =============================================================================
@@ -162,6 +163,7 @@ REST_FRAMEWORK = {
         'user': '5000/day',
         'driver': '10000/day',
         'auth': '10/min',
+        'gps': '12/min',
     },
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'EXCEPTION_HANDLER': 'apps.common.exceptions.exception_handler',
@@ -228,6 +230,23 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 300
+
+# Фоновые проверки (ТЗ, разделы 10, 20)
+CELERY_BEAT_SCHEDULE = {
+    'gps-check-offline': {
+        'task': 'gps.check_offline_vehicles',
+        'schedule': 300.0,  # каждые 5 минут
+        'options': {'queue': 'gps'},
+    },
+    'gps-detect-long-stops': {
+        'task': 'gps.detect_long_stops',
+        'schedule': 300.0,
+        'options': {'queue': 'gps'},
+    },
+}
+CELERY_TASK_ROUTES = {
+    'gps.*': {'queue': 'gps'},
+}
 
 # =============================================================================
 # INTERNATIONALIZATION

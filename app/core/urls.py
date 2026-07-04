@@ -16,6 +16,7 @@ api_v1_patterns = [
     path('', include('apps.packages.urls')),
     path('', include('apps.routes.urls')),
     path('', include('apps.shipments.urls')),
+    path('', include('apps.gps.urls')),
 ]
 
 urlpatterns = [
