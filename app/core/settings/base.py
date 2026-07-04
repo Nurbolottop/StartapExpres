@@ -54,6 +54,9 @@ INSTALLED_APPS = [
     'apps.vehicles',
     'apps.warehouses',
     'apps.tariffs',
+    'apps.orders',
+    'apps.packages',
+    'apps.tracking',
 ]
 
 # =============================================================================
@@ -179,6 +182,18 @@ SPECTACULAR_SETTINGS = {
     'SERVE_INCLUDE_SCHEMA': False,
     'COMPONENT_SPLIT_REQUEST': True,
     'SCHEMA_PATH_PREFIX': '/api/v1',
+    'ENUM_NAME_OVERRIDES': {
+        'OrderStatusEnum': 'apps.orders.choices.OrderStatus',
+        'PackageStatusEnum': 'apps.packages.choices.PackageStatus',
+        'VehicleStatusEnum': 'apps.vehicles.choices.VehicleStatus',
+        'EmployeeStatusEnum': 'apps.users.choices.EmployeeStatus',
+        'DriverStatusEnum': 'apps.users.choices.DriverStatus',
+        'ZoneTypeEnum': 'apps.warehouses.choices.ZoneType',
+        'PhotoTypeEnum': 'apps.packages.choices.PhotoType',
+        'PaymentTypeEnum': 'apps.orders.choices.PaymentType',
+        'DeliveryTypeEnum': 'apps.orders.choices.DeliveryType',
+        'FuelTypeEnum': 'apps.vehicles.choices.FuelType',
+    },
 }
 
 # =============================================================================
