@@ -1,28 +1,30 @@
-"""Единый формат ошибок API.
+"""Иерархия исключений и глобальный обработчик (ТЗ, разделы 24–25).
 
-Все ошибки возвращаются в виде:
-    {"error": {"code": "<machine_code>", "message": "<человекочитаемое>", "details": {...}}}
-
-Сервисный слой бросает ApplicationError (и наследников) — HTTP-статус
-определяется классом исключения, а не местом вызова.
+Формат ошибки:
+    {"success": false, "message": "...", "error": {"code": "...", "details": {...}}}
+Для ошибок валидации вместо details используется fields.
 """
+
 import logging
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models.deletion import ProtectedError
-from rest_framework import exceptions, status
+from rest_framework import exceptions as drf_exceptions
+from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.serializers import as_serializer_error
 from rest_framework.views import exception_handler as drf_exception_handler
 
+from apps.common import errors
+
 logger = logging.getLogger(__name__)
 
 
-class ApplicationError(Exception):
-    """Базовое доменное исключение сервисного слоя."""
+class BaseAppException(Exception):
+    """Базовое исключение системы. Все доменные исключения наследуются от него."""
 
     status_code = status.HTTP_400_BAD_REQUEST
-    default_code = 'application_error'
+    default_code = errors.SystemErrors.UNKNOWN
     default_message = 'Ошибка выполнения операции.'
 
     def __init__(self, message: str | None = None, *, code: str | None = None, details: dict | None = None):
@@ -32,62 +34,103 @@ class ApplicationError(Exception):
         super().__init__(self.message)
 
 
-class NotFoundError(ApplicationError):
-    status_code = status.HTTP_404_NOT_FOUND
-    default_code = 'not_found'
-    default_message = 'Объект не найден.'
+class ValidationException(BaseAppException):
+    status_code = status.HTTP_400_BAD_REQUEST
+    default_code = errors.VALIDATION_ERROR
+    default_message = 'Ошибка валидации данных.'
 
 
-class ConflictError(ApplicationError):
-    status_code = status.HTTP_409_CONFLICT
-    default_code = 'conflict'
-    default_message = 'Конфликт данных.'
+class AuthenticationException(BaseAppException):
+    status_code = status.HTTP_401_UNAUTHORIZED
+    default_code = errors.AuthErrors.INVALID_PASSWORD
+    default_message = 'Ошибка аутентификации.'
 
 
-class PermissionDeniedError(ApplicationError):
+class PermissionException(BaseAppException):
     status_code = status.HTTP_403_FORBIDDEN
-    default_code = 'permission_denied'
+    default_code = errors.PERMISSION_DENIED
     default_message = 'Недостаточно прав для выполнения операции.'
 
 
-def _error_payload(code: str, message: str, details) -> dict:
-    return {'error': {'code': code, 'message': message, 'details': details}}
+class NotFoundException(BaseAppException):
+    status_code = status.HTTP_404_NOT_FOUND
+    default_code = errors.NOT_FOUND
+    default_message = 'Объект не найден.'
+
+
+class ConflictException(BaseAppException):
+    status_code = status.HTTP_409_CONFLICT
+    default_code = errors.CONFLICT
+    default_message = 'Конфликт данных.'
+
+
+class BusinessException(BaseAppException):
+    """Нарушение бизнес-правила (ТЗ, раздел 24: HTTP 422)."""
+
+    status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
+    default_code = errors.SystemErrors.UNKNOWN
+    default_message = 'Операция нарушает бизнес-правила.'
+
+
+class ThrottledException(BaseAppException):
+    status_code = status.HTTP_429_TOO_MANY_REQUESTS
+    default_code = errors.AuthErrors.TOO_MANY_ATTEMPTS
+    default_message = 'Слишком много запросов. Повторите позже.'
+
+
+class IntegrationException(BaseAppException):
+    status_code = status.HTTP_502_BAD_GATEWAY
+    default_code = errors.SystemErrors.EXTERNAL_PROVIDER
+    default_message = 'Ошибка внешнего сервиса.'
+
+
+def _error_body(message: str, code: str, *, details=None, fields=None) -> dict:
+    error: dict = {'code': code}
+    if fields is not None:
+        error['fields'] = fields
+    else:
+        error['details'] = details or {}
+    return {'success': False, 'message': message, 'error': error}
 
 
 def exception_handler(exc, context):
+    """Глобальный обработчик: любые исключения → единый конверт ошибки."""
     if isinstance(exc, DjangoValidationError):
-        exc = exceptions.ValidationError(as_serializer_error(exc))
+        exc = drf_exceptions.ValidationError(as_serializer_error(exc))
 
     if isinstance(exc, ProtectedError):
-        exc = ConflictError(
-            'Объект используется другими записями и не может быть удалён.',
-            code='protected_object',
-        )
+        exc = ConflictException('Объект используется другими записями и не может быть удалён.')
 
-    if isinstance(exc, ApplicationError):
-        logger.info('ApplicationError: %s (code=%s)', exc.message, exc.code)
+    if isinstance(exc, BaseAppException):
+        logger.info('%s: %s (code=%s)', type(exc).__name__, exc.message, exc.code)
         return Response(
-            _error_payload(exc.code, exc.message, exc.details),
+            _error_body(exc.message, exc.code, details=exc.details),
             status=exc.status_code,
         )
 
     response = drf_exception_handler(exc, context)
     if response is None:
-        # Необработанное исключение — стандартный 500 Django + лог
         logger.exception('Необработанное исключение в %s', context.get('view'))
         return None
 
-    if isinstance(exc, exceptions.ValidationError):
-        code = 'validation_error'
-        message = 'Ошибка валидации данных.'
-        details = response.data
-    else:
-        code = getattr(exc, 'default_code', 'error')
-        detail = getattr(exc, 'detail', None)
-        message = str(detail) if isinstance(detail, (str, exceptions.ErrorDetail)) else str(
-            getattr(exc, 'default_detail', 'Ошибка запроса.')
-        )
-        details = {}
+    if isinstance(exc, drf_exceptions.ValidationError):
+        response.data = _error_body('Ошибка валидации данных.', errors.VALIDATION_ERROR, fields=response.data)
+        return response
 
-    response.data = _error_payload(code, message, details)
+    code_map = {
+        drf_exceptions.NotAuthenticated: ('Unauthorized', errors.AuthErrors.INVALID_PASSWORD),
+        drf_exceptions.AuthenticationFailed: ('Unauthorized', errors.AuthErrors.TOKEN_EXPIRED),
+        drf_exceptions.PermissionDenied: ('Permission denied', errors.PERMISSION_DENIED),
+        drf_exceptions.NotFound: ('Object not found', errors.NOT_FOUND),
+        drf_exceptions.Throttled: ('Too many requests', errors.AuthErrors.TOO_MANY_ATTEMPTS),
+        drf_exceptions.MethodNotAllowed: ('Method not allowed', errors.SystemErrors.UNKNOWN),
+    }
+    for exc_class, (message, code) in code_map.items():
+        if isinstance(exc, exc_class):
+            response.data = _error_body(message, code)
+            return response
+
+    detail = getattr(exc, 'detail', None)
+    message = str(detail) if isinstance(detail, (str, drf_exceptions.ErrorDetail)) else 'Ошибка запроса.'
+    response.data = _error_body(message, getattr(exc, 'default_code', errors.SystemErrors.UNKNOWN))
     return response

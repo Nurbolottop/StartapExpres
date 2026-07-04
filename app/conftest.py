@@ -1,8 +1,17 @@
 import pytest
+from django.core.cache import cache
 from rest_framework.test import APIClient
 
-from apps.accounts.constants import Roles
-from apps.accounts.tests.factories import UserFactory
+from apps.users.choices import Roles
+from apps.users.tests.factories import UserFactory
+
+
+@pytest.fixture(autouse=True)
+def _clear_cache():
+    """Кэш (brute-force счётчики, throttle) не должен утекать между тестами."""
+    cache.clear()
+    yield
+    cache.clear()
 
 
 @pytest.fixture
@@ -11,18 +20,38 @@ def api_client() -> APIClient:
 
 
 @pytest.fixture
-def admin_user():
-    return UserFactory(role=Roles.ADMIN)
+def superadmin():
+    return UserFactory(role=Roles.SUPERADMIN)
 
 
 @pytest.fixture
-def manager_user():
-    return UserFactory(role=Roles.MANAGER)
+def director():
+    return UserFactory(role=Roles.DIRECTOR)
 
 
 @pytest.fixture
-def operator_user():
+def operator():
     return UserFactory(role=Roles.OPERATOR)
+
+
+@pytest.fixture
+def warehouse_user():
+    return UserFactory(role=Roles.WAREHOUSE)
+
+
+@pytest.fixture
+def driver():
+    return UserFactory(role=Roles.DRIVER)
+
+
+@pytest.fixture
+def finance_user():
+    return UserFactory(role=Roles.FINANCE)
+
+
+@pytest.fixture
+def client_user():
+    return UserFactory(role=Roles.CLIENT)
 
 
 @pytest.fixture

@@ -1,4 +1,5 @@
 """Настройки для запуска тестов: быстрые, без внешних зависимостей (Postgres/Redis)."""
+
 import os
 
 os.environ.setdefault('SECRET_KEY', 'test-secret-key-not-for-production')
@@ -31,6 +32,12 @@ WHITENOISE_AUTOREFRESH = True
 REST_FRAMEWORK = {
     **REST_FRAMEWORK,  # noqa: F405
     'DEFAULT_THROTTLE_CLASSES': (),
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '10000/min',
+        'user': '10000/min',
+        'driver': '10000/min',
+        'auth': '10000/min',
+    },
 }
 
 STORAGES = {

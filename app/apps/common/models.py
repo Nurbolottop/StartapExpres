@@ -1,79 +1,95 @@
 import uuid
 
+from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
 
-class UUIDModel(models.Model):
-    """UUID вместо автоинкремента: безопасные внешние идентификаторы,
-    независимость от БД при шардировании/слиянии данных филиалов."""
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-
-    class Meta:
-        abstract = True
-
-
-class TimeStampedModel(models.Model):
-    created_at = models.DateTimeField('Создано', auto_now_add=True, db_index=True)
-    updated_at = models.DateTimeField('Обновлено', auto_now=True)
-
-    class Meta:
-        abstract = True
-
-
-class BaseModel(UUIDModel, TimeStampedModel):
-    """Базовый класс всех доменных моделей системы."""
-
-    class Meta:
-        abstract = True
-
-
 class SoftDeleteQuerySet(models.QuerySet):
     def delete(self):
-        return super().update(deleted_at=timezone.now())
+        return super().update(is_deleted=True, deleted_at=timezone.now())
 
     def hard_delete(self):
         return super().delete()
 
     def alive(self):
-        return self.filter(deleted_at__isnull=True)
+        return self.filter(is_deleted=False)
 
     def dead(self):
-        return self.filter(deleted_at__isnull=False)
+        return self.filter(is_deleted=True)
 
 
-class SoftDeleteManager(models.Manager):
-    def __init__(self, *args, alive_only=True, **kwargs):
-        self.alive_only = alive_only
-        super().__init__(*args, **kwargs)
+class ActiveManager(models.Manager):
+    """Менеджер по умолчанию: скрывает soft-deleted записи."""
 
-    def get_queryset(self):
-        queryset = SoftDeleteQuerySet(self.model, using=self._db)
-        return queryset.alive() if self.alive_only else queryset
+    def get_queryset(self) -> SoftDeleteQuerySet:
+        return SoftDeleteQuerySet(self.model, using=self._db).alive()
 
 
-class SoftDeleteModel(models.Model):
-    """Мягкое удаление: записи с историей (заказы, платежи) физически не удаляются.
+class AllObjectsManager(models.Manager):
+    """Менеджер без фильтрации: возвращает все записи, включая удалённые."""
 
-    `objects` скрывает удалённые записи, `all_objects` возвращает все.
+    def get_queryset(self) -> SoftDeleteQuerySet:
+        return SoftDeleteQuerySet(self.model, using=self._db)
+
+
+class BaseModel(models.Model):
+    """Базовый класс всех доменных моделей (ТЗ, раздел 02).
+
+    UUID PK, метки времени, авторство изменений, флаги активности
+    и мягкого удаления. Физическое удаление — только hard_delete().
     """
 
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField('Создано', auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField('Обновлено', auto_now=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name='Создал',
+        related_name='+',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        editable=False,
+    )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name='Обновил',
+        related_name='+',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        editable=False,
+    )
+    is_active = models.BooleanField('Активен', default=True)
+    is_deleted = models.BooleanField('Удалён', default=False, editable=False)
     deleted_at = models.DateTimeField('Удалено', null=True, blank=True, editable=False)
 
-    objects = SoftDeleteManager()
-    all_objects = SoftDeleteManager(alive_only=False)
+    objects = ActiveManager()
+    all_objects = AllObjectsManager()
 
     class Meta:
         abstract = True
 
     def delete(self, using=None, keep_parents=False):
+        """Soft Delete (ТЗ, раздел 15). Физическое удаление — hard_delete()."""
+        self.is_deleted = True
         self.deleted_at = timezone.now()
-        self.save(update_fields=['deleted_at'])
+        self.save(update_fields=['is_deleted', 'deleted_at', 'updated_at'])
 
     def hard_delete(self, using=None, keep_parents=False):
         super().delete(using=using, keep_parents=keep_parents)
 
-    @property
-    def is_deleted(self) -> bool:
-        return self.deleted_at is not None
+
+class NumberSequence(models.Model):
+    """Счётчик человекочитаемых номеров (ORD-2026-000001) на префикс+год."""
+
+    scope = models.CharField('Область', max_length=32, unique=True)
+    last_value = models.PositiveBigIntegerField('Последнее значение', default=0)
+
+    class Meta:
+        verbose_name = 'Последовательность номеров'
+        verbose_name_plural = 'Последовательности номеров'
+
+    def __str__(self) -> str:
+        return f'{self.scope}: {self.last_value}'

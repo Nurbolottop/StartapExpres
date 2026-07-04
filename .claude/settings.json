@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(DJANGO_SETTINGS_MODULE=core.settings.test ../.venv/bin/python manage.py spectacular --validate --file /dev/null)",
+      "Bash(../.venv/bin/python -m pytest -q)"
+    ]
+  }
+}

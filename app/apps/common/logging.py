@@ -1,12 +1,14 @@
 import logging
 from contextvars import ContextVar
 
-request_id_var: ContextVar[str] = ContextVar('request_id', default='-')
+request_context: ContextVar[dict] = ContextVar('request_context', default={})
 
 
-class RequestIDFilter(logging.Filter):
-    """Добавляет request_id текущего запроса в каждую запись лога."""
+class RequestContextFilter(logging.Filter):
+    """Добавляет request_id/correlation_id текущего запроса в записи лога."""
 
     def filter(self, record: logging.LogRecord) -> bool:
-        record.request_id = request_id_var.get()
+        context = request_context.get()
+        record.request_id = context.get('request_id', '-')
+        record.correlation_id = context.get('correlation_id', '-')
         return True

@@ -1,6 +1,6 @@
+import os
 from datetime import timedelta
 from pathlib import Path
-import os
 
 from dotenv import load_dotenv
 
@@ -40,18 +40,17 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-
     # Third-party
     'rest_framework',
     'rest_framework_simplejwt.token_blacklist',
     'django_filters',
     'corsheaders',
     'drf_spectacular',
-
     # Local apps
     'apps.common',
-    'apps.accounts',
+    'apps.users',
     'apps.branches',
+    'apps.audit',
 ]
 
 # =============================================================================
@@ -61,7 +60,7 @@ MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
-    'apps.common.middleware.RequestIDMiddleware',
+    'apps.common.middleware.RequestContextMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -112,28 +111,32 @@ DATABASES = {
 # =============================================================================
 # AUTHENTICATION
 # =============================================================================
-AUTH_USER_MODEL = 'accounts.User'
+AUTH_USER_MODEL = 'users.User'
 
+# Argon2 — основной хэшер, PBKDF2 — fallback (ТЗ, раздел 30)
+PASSWORD_HASHERS = [
+    'django.contrib.auth.hashers.Argon2PasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2PasswordHasher',
+]
+
+# Парольная политика (ТЗ, раздел 30): 12+ символов, сложность
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
-    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    {
+        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        'OPTIONS': {'min_length': 12},
+    },
     {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
-    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
+    {'NAME': 'apps.common.password_validators.PasswordComplexityValidator'},
 ]
 
 # =============================================================================
 # REST FRAMEWORK
 # =============================================================================
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-    ),
-    'DEFAULT_PERMISSION_CLASSES': (
-        'rest_framework.permissions.IsAuthenticated',
-    ),
-    'DEFAULT_RENDERER_CLASSES': (
-        'rest_framework.renderers.JSONRenderer',
-    ),
+    'DEFAULT_AUTHENTICATION_CLASSES': ('rest_framework_simplejwt.authentication.JWTAuthentication',),
+    'DEFAULT_PERMISSION_CLASSES': ('rest_framework.permissions.IsAuthenticated',),
+    'DEFAULT_RENDERER_CLASSES': ('apps.common.renderers.EnvelopeJSONRenderer',),
     'DEFAULT_PAGINATION_CLASS': 'apps.common.pagination.DefaultPageNumberPagination',
     'PAGE_SIZE': 20,
     'DEFAULT_FILTER_BACKENDS': (
@@ -143,11 +146,13 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_THROTTLE_CLASSES': (
         'rest_framework.throttling.AnonRateThrottle',
-        'rest_framework.throttling.UserRateThrottle',
+        'apps.common.throttling.RoleRateThrottle',
     ),
+    # Rate limits (ТЗ, разделы 13, 30)
     'DEFAULT_THROTTLE_RATES': {
-        'anon': '60/min',
-        'user': '600/min',
+        'anon': '100/day',
+        'user': '5000/day',
+        'driver': '10000/day',
         'auth': '10/min',
     },
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
@@ -235,25 +240,30 @@ STORAGES = {
 # =============================================================================
 # LOGGING
 # =============================================================================
+# Структурированные JSON-логи с request_id/correlation_id (ТЗ, раздел 29)
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     'filters': {
-        'request_id': {
-            '()': 'apps.common.logging.RequestIDFilter',
+        'request_context': {
+            '()': 'apps.common.logging.RequestContextFilter',
         },
     },
     'formatters': {
-        'verbose': {
-            'format': '{levelname} {asctime} {name} [request_id={request_id}] {message}',
+        'json': {
+            'format': (
+                '{{"timestamp": "{asctime}", "level": "{levelname}", "logger": "{name}", '
+                '"request_id": "{request_id}", "correlation_id": "{correlation_id}", '
+                '"message": {message!r}}}'
+            ),
             'style': '{',
         },
     },
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
-            'filters': ['request_id'],
-            'formatter': 'verbose',
+            'filters': ['request_context'],
+            'formatter': 'json',
         },
     },
     'root': {

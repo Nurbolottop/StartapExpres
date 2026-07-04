@@ -6,6 +6,10 @@ drf-spectacular~=0.28.0
 django-filter~=25.1
 django-cors-headers~=4.7.0
 
+# Security
+argon2-cffi~=23.1
+cryptography~=45.0
+
 # Infrastructure
 celery[redis]~=5.5.0
 django-redis~=6.0.0
@@ -13,3 +17,4 @@ psycopg[binary]~=3.2.4
 python-dotenv~=1.1.0
 whitenoise~=6.9.0
 gunicorn~=23.0.0
+Pillow~=11.2

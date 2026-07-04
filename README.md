@@ -1,127 +1,104 @@
 # Express Delivery ERP — Backend
 
-ERP-система управления экспресс-доставкой грузов: клиенты, операторы, склад, водители, финансы, руководство. Полный цикл: заказ → приём груза → склад → маршрут → доставка (GPS) → выдача → финансы → аналитика.
+ERP-система управления экспресс-доставкой грузов (разрабатывается по SRS, части 01–30): клиенты, операторы, склад, водители, финансы, руководство. Полный цикл: заказ → приём груза → склад → маршрут → доставка (GPS) → выдача → финансы → аналитика.
 
 ## Стек
 
 - Python 3.12 / Django 5.2 / Django REST Framework
-- PostgreSQL 16, Redis 7
-- JWT-аутентификация (simplejwt, refresh rotation + blacklist)
-- Celery (worker + beat)
-- OpenAPI/Swagger (drf-spectacular)
+- PostgreSQL 16, Redis 7, Celery (worker + beat)
+- JWT (simplejwt): rotation + blacklist, device-сессии, Argon2
+- OpenAPI: Swagger `/api/docs/`, Redoc `/api/redoc/`
 - Docker / docker-compose (dev и prod)
 
 ## Архитектура
 
-Модульный монолит. Каждый Django-app — bounded context со слоями:
+Модульный монолит, событийно-ориентированный (ТЗ, разделы 05, 17). Слои:
 
 ```
-models (тонкие) → selectors (чтение) → services (бизнес-логика/запись)
-                → serializers (I/O) → views (тонкие)
+View (тонкий) → Serializer (I/O) → Permission → Service (бизнес-логика)
+                                   → Selector (чтение) → ORM
+Service → Event Bus → подписчики (audit, в будущем notifications/analytics)
 ```
 
-Правила:
+Правила (обязательны для всех модулей):
 
-- Бизнес-логика — только в `services.py`. Во views — никакой логики.
-- Сложные выборки — в `selectors.py`.
-- Чистый CRUD без доменной логики (справочники) допускает стандартный `ModelSerializer` + `ModelViewSet`.
-- Все доменные модели наследуют `apps.common.models.BaseModel` (UUID PK + created_at/updated_at).
-- Сервисы бросают `apps.common.exceptions.ApplicationError` (и наследников) — HTTP-статус определяет класс исключения.
+- Запись данных — **только через Service**. View не содержит логики, Serializer не создаёт объектов.
+- Каждая операция сервиса публикует доменное событие (`apps.common.events`); audit пишется подписчиком.
+- Все доменные модели наследуют `apps.common.models.BaseModel` (UUID PK, created/updated_at, created/updated_by, is_active, is_deleted). Удаление — только Soft Delete; физическое — `hard_delete()`.
+- Статусы/роли/типы — только через `choices.py`, никаких строк в коде.
+- Права — только Permission-классы (`apps.common.permissions`, `apps/<module>/permissions.py`); `if user.role == ...` во View запрещён.
+- Ошибки — коды из каталога `apps.common.errors` + иерархия `apps.common.exceptions` (BusinessException → 422, ConflictException → 409 и т.д.).
+- Человекочитаемые номера — `apps.common.services.generate_number('ORD')` → `ORD-2026-000001`.
 
 ### Модули
 
-| Модуль | Назначение |
-|---|---|
-| `apps.common` | базовые модели, единый формат ошибок, permissions, пагинация, request-id middleware, health-check |
-| `apps.accounts` | пользователи, роли, JWT-аутентификация |
-| `apps.branches` | филиалы компании |
-| `apps.orders` | (план) заказы, груз, статусная машина |
-| `apps.warehouse` | (план) приёмка, размещение, склад |
-| `apps.logistics` | (план) маршруты, водители, GPS |
-| `apps.finance` | (план) тарифы, платежи, взаиморасчёты |
-| `apps.analytics` | (план) отчёты и дашборды |
+| Модуль | Состояние | Назначение |
+|---|---|---|
+| `apps.common` | ✅ | BaseModel, Event Bus, конверт ответов, каталог ошибок, permissions, шифрование ПДн, health |
+| `apps.users` | ✅ | User (7 ролей), профили (Client/Employee/Driver), JWT, device-сессии, brute-force защита |
+| `apps.branches` | ✅ | города и филиалы |
+| `apps.audit` | ✅ | append-only журнал всех доменных событий + API |
+| warehouses, vehicles, тарифы | Этап 1B | склады (зоны/ячейки), транспорт, тарифы |
+| orders, packages, shipments, gps, finance, analytics, notifications | Этапы 2–8 | по Roadmap ТЗ (раздел 13) |
 
-### Роли
+## Единый формат API
 
-`client`, `operator`, `warehouse`, `courier`, `finance`, `manager`, `admin` — поле `User.role`. Доступ в API — через `role_required(...)` из `apps.common.permissions`.
-
-## Единый стиль API
-
-- Базовый префикс: `/api/v1/`
-- Аутентификация: `Authorization: Bearer <access>`
-- Документация: `GET /api/docs/` (Swagger UI), схема — `GET /api/schema/`
-- Health-check: `GET /api/v1/health/`
-- Формат ошибок единый:
+Префикс `/api/v1/`, только JSON. Ответы (ТЗ, раздел 25):
 
 ```json
-{"error": {"code": "validation_error", "message": "Ошибка валидации данных.", "details": {"phone": ["..."]}}}
+{"success": true, "message": "Success", "data": {...}, "meta": {"page": 1, "total": 254}}
+{"success": false, "message": "Ошибка валидации данных.", "error": {"code": "VALIDATION_ERROR", "fields": {...}}}
 ```
 
-### Основные endpoint'ы
+Каждый ответ несёт заголовки `X-Request-ID`, `X-Correlation-ID`, `X-API-Version`, `X-Execution-Time`.
 
-| Метод | URL | Описание | Доступ |
-|---|---|---|---|
-| POST | `/api/v1/auth/login/` | вход (phone + password) → access/refresh/user | все |
-| POST | `/api/v1/auth/refresh/` | обновление access-токена | все |
-| POST | `/api/v1/auth/logout/` | выход (blacklist refresh) | авторизованные |
-| GET/PATCH | `/api/v1/auth/me/` | свой профиль | авторизованные |
-| POST | `/api/v1/auth/password/change/` | смена пароля | авторизованные |
-| CRUD | `/api/v1/users/` | управление пользователями | admin, manager |
-| CRUD | `/api/v1/branches/` | справочник филиалов | чтение — все, запись — admin/manager |
+### Основные endpoint'ы (Этап 1A)
+
+| Метод | URL | Доступ |
+|---|---|---|
+| POST | `/api/v1/auth/register/` | все (регистрация клиента) |
+| POST | `/api/v1/auth/login/` · `refresh/` · `logout/` · `logout-all/` | rate limit 10/мин |
+| GET/PATCH | `/api/v1/auth/me/` | авторизованные |
+| POST | `/api/v1/auth/change-password/` | авторизованные |
+| GET/DELETE | `/api/v1/auth/sessions/` · `sessions/{id}/` | авторизованные |
+| CRUD | `/api/v1/users/` | superadmin, director (finance — чтение; operator — создание клиентов) |
+| CRUD | `/api/v1/clients/` | operator, director, superadmin |
+| CRUD | `/api/v1/cities/`, `/api/v1/branches/` | чтение — сотрудники, запись — superadmin |
+| GET | `/api/v1/audit/` | superadmin, director |
+| GET | `/api/v1/health/` (+ `/db/ /cache/ /redis/ /celery/ /storage/`) | публично |
+
+## Безопасность (реализовано)
+
+Argon2, пароль ≥12 (сложность), блокировка входа: 5 ошибок → 30 мин, 20 → до разблокировки SuperAdmin; device-сессии с точечным завершением; шифрование ПДн (паспорт) AES/Fernet; rate limits: аноним 100/день, user 5000/день, driver 10000/день; audit всех операций (append-only).
 
 ## Запуск
 
-### 1. Переменные окружения
-
 ```bash
-cp .envtest .env   # затем отредактируй SECRET_KEY и пароли
-```
-
-### 2. Разработка (docker)
-
-```bash
+cp .envtest .env                      # заполнить SECRET_KEY и пароли
 docker compose --env-file .env -f docker/docker-compose.yml up --build
 ```
 
-> Если buildkit падает с ошибкой `header key ... non-printable ASCII characters` — путь к проекту содержит кириллицу. Создай ASCII-симлинк и запускай из него:
-> `ln -sfn "$(pwd)" ~/.delivery-erp && cd ~/.delivery-erp`
+- API: http://127.0.0.1:8084 (Swagger: `/api/docs/`)
+- Суперпользователь: `docker compose --env-file .env -f docker/docker-compose.yml exec web python manage.py createsuperuser`
 
-- API: http://127.0.0.1:8084 (Swagger: http://127.0.0.1:8084/api/docs/)
-- Postgres снаружи: `localhost:5433`, Redis: `localhost:6389`
-- Миграции и collectstatic выполняются автоматически (entrypoint)
+> Кириллица в пути ломает buildkit — запускать из ASCII-симлинка: `ln -sfn "$(pwd)" ~/.delivery-erp && cd ~/.delivery-erp`
 
-Создание суперпользователя:
+Прод: `docker compose --env-file .env -f docker/docker-compose.prod.yml up --build -d` (gunicorn, whitenoise, celery worker + beat).
 
-```bash
-docker compose --env-file .env -f docker/docker-compose.yml exec web python manage.py createsuperuser
-```
-
-### 3. Продакшн
+## Тесты и качество
 
 ```bash
-docker compose --env-file .env -f docker/docker-compose.prod.yml up --build -d
+cd app && ../.venv/bin/python -m pytest --cov=apps   # sqlite in-memory, Postgres не нужен
+cd .. && .venv/bin/black app/ && .venv/bin/isort app/ && .venv/bin/flake8 app/
 ```
 
-Web слушает `127.0.0.1:8000` (gunicorn, 4 воркера), статику отдаёт whitenoise, media — volume `<PROJECT_NAME>_media_data` (раздаётся host-nginx). Celery worker и beat подняты отдельными контейнерами.
+Требования ТЗ: coverage ≥90% (критические сервисы ≥95%), линтеры чистые, миграции именованные (`0001_create_users_and_profiles`), генерация миграций в Docker запрещена.
 
-### 4. Локальная разработка без docker
+## Документация
 
-```bash
-python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
-cd app && ../.venv/bin/python manage.py runserver   # требуется Postgres/Redis
-```
+- [docs/DEVIATIONS.md](docs/DEVIATIONS.md) — отклонения от ТЗ и разрешённые противоречия
+- [docs/TECH_DEBT.md](docs/TECH_DEBT.md) — реестр технического долга (по Technical Debt Policy)
 
-## Тесты
+## Git
 
-```bash
-cd app && ../.venv/bin/python -m pytest
-```
-
-Тесты идут на sqlite in-memory (`core.settings.test`), Postgres/Redis не требуются.
-
-## Правила разработки
-
-1. Новые миграции создаются в разработке и коммитятся; в контейнере выполняется только `migrate`.
-2. Новая доменная сущность = наследник `BaseModel`; записи с историей (заказы, платежи) — `SoftDeleteModel`.
-3. Каждое изменение покрывается тестами; PR без зелёного `pytest` не мержится.
-4. Секреты — только в `.env` (не коммитится).
+Ветки: main / develop / feature/* / bugfix/* / hotfix/*. Коммиты: conventional (`feat:`, `fix:`, `refactor:` ...).
