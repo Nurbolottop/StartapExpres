@@ -1,0 +1,15 @@
+# Core
+Django~=5.2.1
+djangorestframework~=3.16.0
+djangorestframework-simplejwt~=5.5.0
+drf-spectacular~=0.28.0
+django-filter~=25.1
+django-cors-headers~=4.7.0
+
+# Infrastructure
+celery[redis]~=5.5.0
+django-redis~=6.0.0
+psycopg[binary]~=3.2.4
+python-dotenv~=1.1.0
+whitenoise~=6.9.0
+gunicorn~=23.0.0

@@ -1,0 +1,84 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: ${PROJECT_NAME:-delivery_erp}_db
+    env_file:
+      - ../.env
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: ${PROJECT_NAME:-delivery_erp}_redis
+    ports:
+      - "6389:6379"
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: ${PROJECT_NAME:-delivery_erp}_web
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ../app:/app
+    env_file:
+      - ../.env
+    environment:
+      - DJANGO_SETTINGS_MODULE=core.settings.dev
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8084:8000"
+    networks:
+      - backend
+
+  worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: ${PROJECT_NAME:-delivery_erp}_worker
+    entrypoint: []
+    command: celery -A core worker -l info
+    volumes:
+      - ../app:/app
+    env_file:
+      - ../.env
+    environment:
+      - DJANGO_SETTINGS_MODULE=core.settings.dev
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      web:
+        condition: service_started
+    networks:
+      - backend
+
+networks:
+  backend:
+    name: ${PROJECT_NAME:-delivery_erp}_backend
+    driver: bridge
+
+volumes:
+  postgres_data:
+    name: ${PROJECT_NAME:-delivery_erp}_postgres_data

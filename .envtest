@@ -1,0 +1,30 @@
+# Пример переменных окружения. Скопируй в .env и заполни своими значениями:
+#   cp .envtest .env
+
+# Django Core
+SECRET_KEY=change-me-to-random-50-chars
+
+# Project (используется для нейминга контейнеров/volume/network)
+PROJECT_NAME=delivery_erp
+
+# Hosts & Security
+ALLOWED_HOSTS=127.0.0.1,localhost
+CSRF_TRUSTED_ORIGINS=http://127.0.0.1:8084,http://localhost:8084
+CORS_ALLOWED_ORIGINS=
+
+# Internationalization
+LANGUAGE_CODE=ru
+TIME_ZONE=Asia/Bishkek
+
+# Database (POSTGRES_HOST = имя сервиса БД в docker-compose)
+POSTGRES_DB=delivery_erp
+POSTGRES_USER=delivery_erp
+POSTGRES_PASSWORD=change-me
+POSTGRES_HOST=db
+POSTGRES_PORT=5432
+
+# Redis / Celery (redis = имя сервиса в docker-compose)
+REDIS_URL=redis://redis:6379/0
+
+# Logging
+LOG_LEVEL=INFO
