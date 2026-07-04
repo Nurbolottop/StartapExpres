@@ -57,6 +57,8 @@ INSTALLED_APPS = [
     'apps.orders',
     'apps.packages',
     'apps.tracking',
+    'apps.routes',
+    'apps.shipments',
 ]
 
 # =============================================================================

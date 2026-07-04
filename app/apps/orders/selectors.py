@@ -17,13 +17,9 @@ class OrderSelector:
     def for_user(cls, user) -> QuerySet[Order]:
         """Client — только свои заказы; Driver — заказы в перевозке (после
         появления рейсов на Этапе 4 — только назначенные ему); остальные — все."""
-        from apps.orders.choices import OrderStatus
-
         queryset = cls.base()
         if user.role == Roles.CLIENT:
             return queryset.filter(client=user)
         if user.role == Roles.DRIVER:
-            return queryset.filter(
-                status__in=(OrderStatus.LOADED, OrderStatus.IN_TRANSIT, OrderStatus.ARRIVED)
-            )
+            return queryset.filter(shipment_items__shipment__driver=user).distinct()
         return queryset

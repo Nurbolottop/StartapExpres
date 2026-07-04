@@ -14,6 +14,8 @@ api_v1_patterns = [
     path('', include('apps.tariffs.urls')),
     path('', include('apps.orders.urls')),
     path('', include('apps.packages.urls')),
+    path('', include('apps.routes.urls')),
+    path('', include('apps.shipments.urls')),
 ]
 
 urlpatterns = [

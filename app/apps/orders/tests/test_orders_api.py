@@ -148,7 +148,7 @@ class TestOrderScoping:
 
 class TestOrderFlow:
     def test_full_happy_path_to_completed(
-        self, auth_client, client_user, operator, warehouse_user, driver, finance_user
+        self, auth_client, client_user, operator, warehouse_user, finance_user
     ):
         order = OrderFactory(client=client_user, total_price=1000)
 
@@ -165,9 +165,8 @@ class TestOrderFlow:
             response = wh_client.post(order_url(order.id, 'status/'), {'status': target})
             assert response.status_code == 200, response.json()
 
-        drv = auth_client(driver)
-        assert drv.post(order_url(order.id, 'status/'), {'status': 'in_transit'}).status_code == 200
-        assert drv.post(order_url(order.id, 'status/'), {'status': 'arrived'}).status_code == 200
+        assert wh_client.post(order_url(order.id, 'status/'), {'status': 'in_transit'}).status_code == 200
+        assert wh_client.post(order_url(order.id, 'status/'), {'status': 'arrived'}).status_code == 200
 
         for target in ['ready_for_pickup', 'delivered']:
             assert wh_client.post(order_url(order.id, 'status/'), {'status': target}).status_code == 200
