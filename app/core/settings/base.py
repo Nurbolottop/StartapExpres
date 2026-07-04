@@ -2,6 +2,7 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
+from celery.schedules import crontab
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -60,6 +61,7 @@ INSTALLED_APPS = [
     'apps.routes',
     'apps.shipments',
     'apps.gps',
+    'apps.finance',
 ]
 
 # =============================================================================
@@ -244,8 +246,28 @@ CELERY_BEAT_SCHEDULE = {
         'options': {'queue': 'gps'},
     },
 }
+CELERY_BEAT_SCHEDULE.update(
+    {
+        'finance-daily-report': {
+            'task': 'finance.build_daily_report',
+            'schedule': crontab(hour=23, minute=59),  # ТЗ, раздел 11
+            'options': {'queue': 'finance'},
+        },
+        'finance-monthly-report': {
+            'task': 'finance.build_monthly_report',
+            'schedule': crontab(day_of_month=1, hour=0, minute=30),
+            'options': {'queue': 'finance'},
+        },
+        'finance-check-overdue-debts': {
+            'task': 'finance.check_overdue_debts',
+            'schedule': crontab(hour=9, minute=0),
+            'options': {'queue': 'finance'},
+        },
+    }
+)
 CELERY_TASK_ROUTES = {
     'gps.*': {'queue': 'gps'},
+    'finance.*': {'queue': 'finance'},
 }
 
 # =============================================================================

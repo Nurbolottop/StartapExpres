@@ -143,9 +143,23 @@ class OrderViewSet(ActionPermissionsMixin, ModelViewSet):
     @idempotent
     @action(detail=True, methods=['post'])
     def pay(self, request, pk=None):
+        from apps.finance.services import ORDER_PAYMENT_METHOD_MAP, PaymentService
+        from apps.orders.choices import PaymentType
+
         serializer = OrderPaySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        order = OrderService.pay(actor=request.user, order=self.get_object(), **serializer.validated_data)
+        order = self.get_object()
+        if order.payment_type == PaymentType.POST_PAYMENT:
+            PaymentService.register_post_payment(actor=request.user, order=order)
+        else:
+            method = ORDER_PAYMENT_METHOD_MAP[order.payment_type]
+            PaymentService.register(
+                actor=request.user,
+                order=order,
+                payment_method=method,
+                **serializer.validated_data,
+            )
+        order.refresh_from_db()
         return Response(OrderSerializer(order).data)
 
     @extend_schema(

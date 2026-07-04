@@ -30,6 +30,12 @@ class OrderTransitionService:
         allowed_roles = TRANSITION_ALLOWED_ROLES.get(to_status, frozenset())
         if actor.role not in allowed_roles and not actor.is_superuser:
             raise exceptions.TransitionRoleException()
+        if to_status == OrderStatus.COMPLETED:
+            from apps.finance.exceptions import OrderFinanceIncompleteException
+            from apps.finance.services import PaymentService
+
+            if not PaymentService.is_order_settled(order):
+                raise OrderFinanceIncompleteException()
         if to_status == OrderStatus.CANCELLED and actor.role == Roles.CLIENT:
             from apps.orders.choices import CLIENT_CANCELLABLE_STATUSES
 
