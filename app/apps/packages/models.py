@@ -49,6 +49,14 @@ class Package(BaseModel):
     status = models.CharField(
         'Статус', max_length=20, choices=PackageStatus.choices, default=PackageStatus.CREATED
     )
+    current_cell = models.ForeignKey(
+        'warehouses.WarehouseCell',
+        verbose_name='Текущая ячейка',
+        related_name='packages',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
 
     class Meta:
         verbose_name = 'Грузовое место'

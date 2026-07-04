@@ -124,3 +124,13 @@ class WarehouseCell(BaseModel):
 
     def fits(self, weight, volume) -> bool:
         return weight <= self.free_weight and volume <= self.free_volume
+
+
+from apps.warehouses.models_ops import (  # noqa: E402,F401 — операционные модели склада
+    DamageReport,
+    DeliveryConfirmation,
+    InventoryScan,
+    InventorySession,
+    LostReport,
+    WarehouseMovement,
+)
