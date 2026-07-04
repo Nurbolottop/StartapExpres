@@ -134,14 +134,21 @@ class EmployeeProfile(BaseModel):
 
 
 class DriverProfile(BaseModel):
-    """Профиль водителя (ТЗ, раздел 02). Привязка к автомобилю добавится
-    миграцией вместе с модулем vehicles (Этап 1, фаза B)."""
+    """Профиль водителя (ТЗ, раздел 02)."""
 
     user = models.OneToOneField(
         User, verbose_name='Пользователь', related_name='driver_profile', on_delete=models.CASCADE
     )
     driver_license = models.CharField('Водительское удостоверение', max_length=50, blank=True)
     license_expiry_date = models.DateField('Срок действия ВУ', null=True, blank=True)
+    assigned_vehicle = models.ForeignKey(
+        'vehicles.Vehicle',
+        verbose_name='Закреплённый автомобиль',
+        related_name='driver_profiles',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
     medical_certificate = models.CharField('Медицинская справка', max_length=100, blank=True)
     experience_years = models.PositiveSmallIntegerField('Стаж, лет', default=0)
     rating = models.DecimalField('Рейтинг', max_digits=3, decimal_places=2, default=0)

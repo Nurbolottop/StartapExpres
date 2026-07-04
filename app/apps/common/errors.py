@@ -84,6 +84,10 @@ class WarehouseErrors:
     INVALID_MOVEMENT = 'WAREHOUSE_006'
 
 
+class TariffErrors:
+    NOT_FOUND = 'TARIFF_001'
+
+
 class SystemErrors:
     INTERNAL = 'SYSTEM_001'
     DATABASE = 'SYSTEM_002'

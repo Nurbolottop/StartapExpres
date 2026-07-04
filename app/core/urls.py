@@ -9,6 +9,9 @@ api_v1_patterns = [
     path('', include('apps.users.urls')),
     path('', include('apps.branches.urls')),
     path('', include('apps.audit.urls')),
+    path('', include('apps.vehicles.urls')),
+    path('', include('apps.warehouses.urls')),
+    path('', include('apps.tariffs.urls')),
 ]
 
 urlpatterns = [
