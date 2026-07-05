@@ -21,10 +21,15 @@
 | 3 | Индекс phone/email/qr и т.п. (раздел 26) | unique-поля используют автоматический unique-индекс БД, отдельные дублирующие индексы не создаются | Дублирующий индекс замедляет запись без выгоды для чтения |
 | 4 | `DriverProfile.assigned_vehicle` (раздел 02) | Поле добавится именованной миграцией вместе с модулем vehicles (Этап 1, фаза B) | Модуль vehicles ещё не создан; FK на несуществующую модель невозможен |
 | 5 | Хранение файлов в S3/MinIO (разделы 05, 27) | v1 — локальный storage; интерфейс StorageProvider — при появлении модуля файлов | MinIO поднимается в prod-стек на Этапе 9 (Production) |
+| 6 | TrackingEvent для GPS-событий рейса (раздел 10) | GPS-события пишутся в GPSEvent + Event Bus (audit), а не в per-order TrackingEvent | Одно GPS-событие × N заказов рейса дублировало бы записи; трекинг заказа получает статусные события |
+| 7 | Отдельная модель QRCode (раздел 02) | qr_code/barcode — поля Package с генерацией один раз | Отдельная модель дублировала бы поле пакета; инвариант неизменности обеспечен сервисом |
+| 8 | WebSocket/Channels для live-дашбордов и GPS (разделы 05, 18) | v1 — HTTP polling (live GPS из Redis, дашборд с кэшем 30 сек) | Раздел 18 допускает деградацию до опроса; Channels — Этап продакшн-масштабирования (TECH_DEBT) |
+| 9 | Kubernetes (раздел 28) | Не внедрён в v1 по «Замечанию архитектора» самого ТЗ | Docker Compose; код 12-factor, готов к переносу |
+| 10 | SMS/Email/Push боевые провайдеры (разделы 12, 16) | Provider Interface + LogProvider; боевые ключи подключаются регистрацией класса | Нет учётных данных операторов; бизнес-код не изменится |
 
 ## Ещё не реализованные подсистемы ТЗ (по Roadmap, раздел 13)
 
-Этап 1 (остаток): warehouses, vehicles, тарифы.
-Этапы 2–9: orders/packages/QR → warehouse-процессы → shipments → GPS → finance →
-analytics → notifications (+2FA, OTP) → production-hardening (CI/CD, мониторинг,
-backup, WebSocket/Channels, Kubernetes-готовность).
+Этапы 1–8 Roadmap реализованы. Из Этапа 9 (production) сделано: CI (GitHub
+Actions: линтеры, тесты, coverage>=90, migrations/schema check, docker build),
+очереди Celery, health-мониторинг. Остальное — см. docs/TECH_DEBT.md
+(мониторинг Sentry/Prometheus, backup-скрипты, MinIO, Channels, 2FA).

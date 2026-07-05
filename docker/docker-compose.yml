@@ -57,7 +57,7 @@ services:
       dockerfile: docker/Dockerfile
     container_name: ${PROJECT_NAME:-delivery_erp}_worker
     entrypoint: []
-    command: celery -A core worker -l info
+    command: celery -A core worker -l info -Q default,gps,finance,notifications
     volumes:
       - ../app:/app
     env_file:

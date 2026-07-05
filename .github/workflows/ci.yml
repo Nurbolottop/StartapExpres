@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  quality:
+    name: Lint, tests, coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: isort
+        run: isort --check-only app/
+
+      - name: black
+        run: black --check app/
+
+      - name: flake8
+        run: flake8 app/
+
+      - name: Migrations check
+        working-directory: app
+        env:
+          DJANGO_SETTINGS_MODULE: core.settings.test
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: OpenAPI schema check
+        working-directory: app
+        env:
+          DJANGO_SETTINGS_MODULE: core.settings.test
+        run: python manage.py spectacular --validate --file /dev/null
+
+      - name: Tests with coverage (>=90%)
+        working-directory: app
+        run: pytest --cov=apps --cov-fail-under=90
+
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    needs: quality
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -f docker/Dockerfile -t delivery-erp-backend:ci .
