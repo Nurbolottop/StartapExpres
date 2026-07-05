@@ -170,7 +170,7 @@ REST_FRAMEWORK = {
         'auth': '10/min',
         'gps': '12/min',
     },
-    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'DEFAULT_SCHEMA_CLASS': 'apps.common.schema.RussianAutoSchema',
     'EXCEPTION_HANDLER': 'apps.common.exceptions.exception_handler',
     'TEST_REQUEST_DEFAULT_FORMAT': 'json',
 }
@@ -184,13 +184,87 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
+API_DESCRIPTION = """
+ERP-система управления экспресс-доставкой грузов: заказы, склад, рейсы,
+GPS-мониторинг, финансы, аналитика.
+
+## Авторизация
+
+1. `POST /api/v1/auth/login/` — вход по телефону и паролю, в ответе `access` и `refresh` токены.
+2. Нажмите кнопку **Authorize** и вставьте access-токен (формат: `Bearer <токен>` подставится автоматически).
+3. Access живёт 30 минут — обновляйте через `POST /api/v1/auth/refresh/`.
+
+## Формат ответов
+
+Все ответы — в едином конверте:
+
+```json
+{"success": true, "message": "Success", "data": {...}, "meta": {"page": 1, "total": 254}}
+```
+
+Ошибки:
+
+```json
+{"success": false, "message": "Ошибка валидации данных.",
+ "error": {"code": "VALIDATION_ERROR", "fields": {...}}}
+```
+
+Коды ошибок — машиночитаемые: `AUTH_001..006`, `ORDER_001..010`, `SHIPMENT_001..009`,
+`PACKAGE_001..007`, `PAYMENT_001..006`, `GPS_001..006`, `WAREHOUSE_001..006`.
+
+## Роли
+
+`client` — только свои заказы · `operator` — заказы, клиенты, рейсы ·
+`warehouse` — складские операции и сканирование · `driver` — свои рейсы и GPS ·
+`finance` — платежи, касса, возвраты · `director` — просмотр всего · `superadmin` — всё.
+
+## Идемпотентность
+
+Критические POST (создание заказа, оплата, возврат, создание рейса) поддерживают
+заголовок `Idempotency-Key`: повторный запрос с тем же ключом не продублирует операцию.
+"""
+
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Express Delivery ERP API',
-    'DESCRIPTION': 'ERP-система управления экспресс-доставкой грузов.',
+    'DESCRIPTION': API_DESCRIPTION,
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
     'COMPONENT_SPLIT_REQUEST': True,
     'SCHEMA_PATH_PREFIX': '/api/v1',
+    'TAGS': [
+        {'name': 'auth', 'description': 'Регистрация, вход, JWT-токены, профиль, сессии устройств'},
+        {'name': 'users', 'description': 'Управление пользователями (SuperAdmin/Director)'},
+        {'name': 'clients', 'description': 'Работа операторов с клиентами'},
+        {'name': 'cities', 'description': 'Справочник городов'},
+        {'name': 'branches', 'description': 'Филиалы компании'},
+        {'name': 'warehouses', 'description': 'Склады, зоны и ячейки хранения'},
+        {
+            'name': 'warehouse-operations',
+            'description': 'Складские процессы: приём, размещение, перемещение, инвентаризация, выдача',
+        },
+        {'name': 'vehicles', 'description': 'Автопарк и назначение водителей'},
+        {'name': 'routes', 'description': 'Маршруты между филиалами'},
+        {'name': 'tariffs', 'description': 'Тарифы, дополнительные услуги, калькулятор стоимости'},
+        {'name': 'orders', 'description': 'Заказы: создание, подтверждение, оплата, статусы (FSM), история'},
+        {'name': 'packages', 'description': 'Грузовые места: QR/штрихкоды, фотофиксация, сканирование'},
+        {
+            'name': 'shipments',
+            'description': 'Рейсы: состав, погрузка/разгрузка по сканам, жизненный цикл, инциденты',
+        },
+        {
+            'name': 'gps',
+            'description': 'GPS-мониторинг: координаты водителей, онлайн-карта, история, геозоны',
+        },
+        {
+            'name': 'finance',
+            'description': 'Платежи, счета, касса, задолженности, возвраты, финансовые отчёты',
+        },
+        {'name': 'dashboard', 'description': 'Ролевой дашборд'},
+        {'name': 'reports', 'description': 'Аналитические отчёты'},
+        {'name': 'notifications', 'description': 'Уведомления и шаблоны'},
+        {'name': 'audit', 'description': 'Журнал аудита (только чтение)'},
+        {'name': 'health', 'description': 'Проверки живости сервиса и зависимостей'},
+    ],
     'ENUM_NAME_OVERRIDES': {
         'OrderStatusEnum': 'apps.orders.choices.OrderStatus',
         'PackageStatusEnum': 'apps.packages.choices.PackageStatus',
