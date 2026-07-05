@@ -62,6 +62,9 @@ INSTALLED_APPS = [
     'apps.shipments',
     'apps.gps',
     'apps.finance',
+    'apps.analytics',
+    'apps.notifications',
+    'apps.integrations',
 ]
 
 # =============================================================================
@@ -268,6 +271,7 @@ CELERY_BEAT_SCHEDULE.update(
 CELERY_TASK_ROUTES = {
     'gps.*': {'queue': 'gps'},
     'finance.*': {'queue': 'finance'},
+    'notifications.*': {'queue': 'notifications'},
 }
 
 # =============================================================================

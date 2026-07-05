@@ -18,6 +18,8 @@ api_v1_patterns = [
     path('', include('apps.shipments.urls')),
     path('', include('apps.gps.urls')),
     path('', include('apps.finance.urls')),
+    path('', include('apps.analytics.urls')),
+    path('', include('apps.notifications.urls')),
 ]
 
 urlpatterns = [
