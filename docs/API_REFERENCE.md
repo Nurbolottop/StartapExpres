@@ -121,6 +121,55 @@ Query-параметры:
 | `old_password` | string | да |  |
 | `new_password` | string | да |  |
 
+### `GET /api/v1/auth/devices/`
+
+**Мои push-устройства**
+
+Привязка FCM/APNs-токена устройства к пользователю (push-уведомления).
+
+Ответ (`data`):
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `id` | string (uuid) |  |
+| `device_id` | string | Идентификатор устройства |
+| `platform` | enum: `android` \| `ios` |  |
+| `is_active` | boolean | Активен |
+| `created_at` | string (date-time) | Создано |
+| `updated_at` | string (date-time) | Обновлено |
+
+### `POST /api/v1/auth/devices/`
+
+**Регистрация push-токена устройства**
+
+Привязка FCM/APNs-токена устройства к пользователю (push-уведомления).
+
+Тело запроса (JSON):
+
+| Поле | Тип | Обяз. | Описание |
+|---|---|---|---|
+| `fcm_token` | string | да |  |
+| `platform` | enum: `android` \| `ios` | да | * `android` - Android
+* `ios` - iOS |
+| `device_id` | string | да |  |
+
+Ответ (`data`):
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `id` | string (uuid) |  |
+| `device_id` | string | Идентификатор устройства |
+| `platform` | enum: `android` \| `ios` |  |
+| `is_active` | boolean | Активен |
+| `created_at` | string (date-time) | Создано |
+| `updated_at` | string (date-time) | Обновлено |
+
+### `DELETE /api/v1/auth/devices/{device_id}/`
+
+**Удаление push-токена устройства**
+
+Отвязка push-токена (вызывается при logout).
+
 ### `POST /api/v1/auth/login/`
 
 **Вход по телефону и паролю**
@@ -170,9 +219,9 @@ Query-параметры:
 | `first_name` | string | Имя |
 | `middle_name` | string | Отчество |
 | `full_name` | string |  |
-| `role` | object | Роль |
+| `role` | enum: `client` \| `operator` \| `warehouse` \| `driver` \| `finance` \| `director` \| `superadmin` |  |
 | `avatar` | string (uri) | Аватар |
-| `language` | object | Язык |
+| `language` | enum: `ky` \| `ru` \| `en` |  |
 | `timezone` | string | Часовой пояс |
 | `is_verified` | boolean | Подтверждён |
 | `is_active` | boolean | Активен |
@@ -209,15 +258,41 @@ Query-параметры:
 | `first_name` | string | Имя |
 | `middle_name` | string | Отчество |
 | `full_name` | string |  |
-| `role` | object | Роль |
+| `role` | enum: `client` \| `operator` \| `warehouse` \| `driver` \| `finance` \| `director` \| `superadmin` |  |
 | `avatar` | string (uri) | Аватар |
-| `language` | object | Язык |
+| `language` | enum: `ky` \| `ru` \| `en` |  |
 | `timezone` | string | Часовой пояс |
 | `is_verified` | boolean | Подтверждён |
 | `is_active` | boolean | Активен |
 | `last_login` | string (date-time) | Последний вход |
 | `created_at` | string (date-time) | Создано |
 | `profile` | object |  |
+
+### `POST /api/v1/auth/password-reset/confirm/`
+
+**Восстановление пароля: установка нового по SMS-коду**
+
+Неверный/истёкший код — 400 AUTH_007 (максимум 5 попыток). После смены пароля все сессии и refresh-токены отзываются.
+
+Тело запроса (JSON):
+
+| Поле | Тип | Обяз. | Описание |
+|---|---|---|---|
+| `phone` | string | да |  |
+| `code` | string | да |  |
+| `new_password` | string | да |  |
+
+### `POST /api/v1/auth/password-reset/request/`
+
+**Восстановление пароля: запрос SMS-кода**
+
+Ответ всегда успешный — существование номера не раскрывается. Код живёт 10 минут, повторный запрос — не чаще раза в минуту (429 AUTH_008).
+
+Тело запроса (JSON):
+
+| Поле | Тип | Обяз. | Описание |
+|---|---|---|---|
+| `phone` | string | да |  |
 
 ### `POST /api/v1/auth/refresh/`
 
@@ -277,6 +352,53 @@ Query-параметры:
 ### `DELETE /api/v1/auth/sessions/{session_id}/`
 
 **Завершить сессию устройства**
+
+### `POST /api/v1/auth/verify/confirm/`
+
+**Верификация телефона: подтверждение кода**
+
+Успех — is_verified=true. Неверный/истёкший код — 400 AUTH_007.
+
+Тело запроса (JSON):
+
+| Поле | Тип | Обяз. | Описание |
+|---|---|---|---|
+| `phone` | string | да |  |
+| `code` | string | да |  |
+
+Ответ (`data`):
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `id` | string (uuid) |  |
+| `phone` | string | Телефон |
+| `email` | string (email) |  |
+| `username` | string | Логин |
+| `last_name` | string | Фамилия |
+| `first_name` | string | Имя |
+| `middle_name` | string | Отчество |
+| `full_name` | string |  |
+| `role` | enum: `client` \| `operator` \| `warehouse` \| `driver` \| `finance` \| `director` \| `superadmin` |  |
+| `avatar` | string (uri) | Аватар |
+| `language` | enum: `ky` \| `ru` \| `en` |  |
+| `timezone` | string | Часовой пояс |
+| `is_verified` | boolean | Подтверждён |
+| `is_active` | boolean | Активен |
+| `last_login` | string (date-time) | Последний вход |
+| `created_at` | string (date-time) | Создано |
+| `profile` | object |  |
+
+### `POST /api/v1/auth/verify/request/`
+
+**Верификация телефона: запрос SMS-кода**
+
+Ответ всегда успешный. Для уже подтверждённого номера SMS не шлётся.
+
+Тело запроса (JSON):
+
+| Поле | Тип | Обяз. | Описание |
+|---|---|---|---|
+| `phone` | string | да |  |
 
 
 ---
@@ -593,9 +715,9 @@ Query-параметры:
 | `first_name` | string | Имя |
 | `middle_name` | string | Отчество |
 | `full_name` | string |  |
-| `role` | object | Роль |
+| `role` | enum: `client` \| `operator` \| `warehouse` \| `driver` \| `finance` \| `director` \| `superadmin` |  |
 | `avatar` | string (uri) | Аватар |
-| `language` | object | Язык |
+| `language` | enum: `ky` \| `ru` \| `en` |  |
 | `timezone` | string | Часовой пояс |
 | `is_verified` | boolean | Подтверждён |
 | `is_active` | boolean | Активен |
@@ -660,9 +782,9 @@ Query-параметры:
 | `first_name` | string | Имя |
 | `middle_name` | string | Отчество |
 | `full_name` | string |  |
-| `role` | object | Роль |
+| `role` | enum: `client` \| `operator` \| `warehouse` \| `driver` \| `finance` \| `director` \| `superadmin` |  |
 | `avatar` | string (uri) | Аватар |
-| `language` | object | Язык |
+| `language` | enum: `ky` \| `ru` \| `en` |  |
 | `timezone` | string | Часовой пояс |
 | `is_verified` | boolean | Подтверждён |
 | `is_active` | boolean | Активен |
@@ -688,9 +810,9 @@ Query-параметры:
 | `first_name` | string | Имя |
 | `middle_name` | string | Отчество |
 | `full_name` | string |  |
-| `role` | object | Роль |
+| `role` | enum: `client` \| `operator` \| `warehouse` \| `driver` \| `finance` \| `director` \| `superadmin` |  |
 | `avatar` | string (uri) | Аватар |
-| `language` | object | Язык |
+| `language` | enum: `ky` \| `ru` \| `en` |  |
 | `timezone` | string | Часовой пояс |
 | `is_verified` | boolean | Подтверждён |
 | `is_active` | boolean | Активен |
@@ -754,9 +876,9 @@ Query-параметры:
 | `first_name` | string | Имя |
 | `middle_name` | string | Отчество |
 | `full_name` | string |  |
-| `role` | object | Роль |
+| `role` | enum: `client` \| `operator` \| `warehouse` \| `driver` \| `finance` \| `director` \| `superadmin` |  |
 | `avatar` | string (uri) | Аватар |
-| `language` | object | Язык |
+| `language` | enum: `ky` \| `ru` \| `en` |  |
 | `timezone` | string | Часовой пояс |
 | `is_verified` | boolean | Подтверждён |
 | `is_active` | boolean | Активен |
@@ -888,7 +1010,7 @@ permission_classes_by_action = {
 | `cashbox` | string (uuid) | Касса |
 | `payment` | string (uuid) | Платёж |
 | `amount` | string (decimal) | Сумма |
-| `type` | object | Тип |
+| `type` | enum: `income` \| `expense` \| `refund` \| `transfer` \| `correction` |  |
 | `comment` | string | Комментарий |
 | `created_by` | string (uuid) | Создал |
 | `created_at` | string (date-time) | Создано |
@@ -946,7 +1068,7 @@ Query-параметры:
 | `cashbox` | string (uuid) | Касса |
 | `payment` | string (uuid) | Платёж |
 | `amount` | string (decimal) | Сумма |
-| `type` | object | Тип |
+| `type` | enum: `income` \| `expense` \| `refund` \| `transfer` \| `correction` |  |
 | `comment` | string | Комментарий |
 | `created_by` | string (uuid) | Создал |
 | `created_at` | string (date-time) | Создано |
@@ -985,7 +1107,7 @@ Query-параметры:
 | `amount` | string (decimal) | Сумма долга |
 | `paid_amount` | string (decimal) | Погашено |
 | `due_date` | string (date) | Срок оплаты |
-| `status` | object | Статус |
+| `status` | enum: `open` \| `partially_paid` \| `closed` \| `overdue` |  |
 | `created_at` | string (date-time) | Создано |
 
 ### `GET /api/v1/debts/{id}/`
@@ -1009,7 +1131,7 @@ permission_classes_by_action = {
 | `amount` | string (decimal) | Сумма долга |
 | `paid_amount` | string (decimal) | Погашено |
 | `due_date` | string (date) | Срок оплаты |
-| `status` | object | Статус |
+| `status` | enum: `open` \| `partially_paid` \| `closed` \| `overdue` |  |
 | `created_at` | string (date-time) | Создано |
 
 ### `POST /api/v1/debts/{id}/pay/`
@@ -1045,7 +1167,7 @@ permission_classes_by_action = {
 | `amount` | string (decimal) | Сумма долга |
 | `paid_amount` | string (decimal) | Погашено |
 | `due_date` | string (date) | Срок оплаты |
-| `status` | object | Статус |
+| `status` | enum: `open` \| `partially_paid` \| `closed` \| `overdue` |  |
 | `created_at` | string (date-time) | Создано |
 
 ### `GET /api/v1/financial-reports/`
@@ -1122,7 +1244,7 @@ Query-параметры:
 | `vat_percent` | string (decimal) | НДС, % |
 | `issued_at` | string (date-time) | Выставлен |
 | `due_date` | string (date) | Срок оплаты |
-| `status` | object | Статус |
+| `status` | enum: `draft` \| `issued` \| `paid` \| `cancelled` |  |
 | `created_at` | string (date-time) | Создано |
 
 ### `GET /api/v1/invoices/{id}/`
@@ -1142,7 +1264,7 @@ Query-параметры:
 | `vat_percent` | string (decimal) | НДС, % |
 | `issued_at` | string (date-time) | Выставлен |
 | `due_date` | string (date) | Срок оплаты |
-| `status` | object | Статус |
+| `status` | enum: `draft` \| `issued` \| `paid` \| `cancelled` |  |
 | `created_at` | string (date-time) | Создано |
 
 ### `GET /api/v1/payments/`
@@ -1182,11 +1304,11 @@ Query-параметры:
 | `order_number` | string |  |
 | `amount` | string (decimal) | Сумма |
 | `currency` | string | Валюта |
-| `payment_method` | object | Метод |
+| `payment_method` | enum: `cash` \| `card` \| `bank_transfer` \| `qr` \| `pos` \| `online` |  |
 | `transaction_id` | string | Внешний ID транзакции |
 | `paid_by` | string (uuid) | Плательщик |
 | `paid_at` | string (date-time) | Оплачен |
-| `status` | object | Статус |
+| `status` | enum: `pending` \| `paid` \| `failed` \| `cancelled` \| `refunded` |  |
 | `created_at` | string (date-time) | Создано |
 
 ### `GET /api/v1/payments/{id}/`
@@ -1205,11 +1327,11 @@ Query-параметры:
 | `order_number` | string |  |
 | `amount` | string (decimal) | Сумма |
 | `currency` | string | Валюта |
-| `payment_method` | object | Метод |
+| `payment_method` | enum: `cash` \| `card` \| `bank_transfer` \| `qr` \| `pos` \| `online` |  |
 | `transaction_id` | string | Внешний ID транзакции |
 | `paid_by` | string (uuid) | Плательщик |
 | `paid_at` | string (date-time) | Оплачен |
-| `status` | object | Статус |
+| `status` | enum: `pending` \| `paid` \| `failed` \| `cancelled` \| `refunded` |  |
 | `created_at` | string (date-time) | Создано |
 
 ### `POST /api/v1/payments/{id}/refund/`
@@ -1237,7 +1359,7 @@ Query-параметры:
 | `id` | string (uuid) |  |
 | `payment` | string (uuid) | Платёж |
 | `amount` | string (decimal) | Сумма |
-| `reason` | object | Причина |
+| `reason` | enum: `customer_request` \| `cancelled_order` \| `wrong_payment` \| `duplicate_payment` \| `other` |  |
 | `comment` | string | Комментарий |
 | `created_by` | string (uuid) | Создал |
 | `created_at` | string (date-time) | Создано |
@@ -1281,7 +1403,7 @@ Query-параметры:
 |---|---|---|
 | `id` | string (uuid) |  |
 | `name` | string | Название |
-| `type` | object | Тип |
+| `type` | enum: `warehouse` \| `branch` \| `checkpoint` \| `delivery` \| `custom` |  |
 | `latitude` | string (decimal) | Широта центра |
 | `longitude` | string (decimal) | Долгота центра |
 | `radius_m` | integer (int64) | Радиус, м |
@@ -1305,7 +1427,11 @@ permission_classes_by_action = {
 | Поле | Тип | Обяз. | Описание |
 |---|---|---|---|
 | `name` | string | да | Название |
-| `type` | object | нет | Тип |
+| `type` | enum: `warehouse` \| `branch` \| `checkpoint` \| `delivery` \| `custom` | нет | * `warehouse` - Склад
+* `branch` - Филиал
+* `checkpoint` - Контрольная точка
+* `delivery` - Зона доставки
+* `custom` - Произвольная |
 | `latitude` | string (decimal) | да | Широта центра |
 | `longitude` | string (decimal) | да | Долгота центра |
 | `radius_m` | integer (int64) | нет | Радиус, м |
@@ -1317,7 +1443,7 @@ permission_classes_by_action = {
 |---|---|---|
 | `id` | string (uuid) |  |
 | `name` | string | Название |
-| `type` | object | Тип |
+| `type` | enum: `warehouse` \| `branch` \| `checkpoint` \| `delivery` \| `custom` |  |
 | `latitude` | string (decimal) | Широта центра |
 | `longitude` | string (decimal) | Долгота центра |
 | `radius_m` | integer (int64) | Радиус, м |
@@ -1342,7 +1468,7 @@ permission_classes_by_action = {
 |---|---|---|
 | `id` | string (uuid) |  |
 | `name` | string | Название |
-| `type` | object | Тип |
+| `type` | enum: `warehouse` \| `branch` \| `checkpoint` \| `delivery` \| `custom` |  |
 | `latitude` | string (decimal) | Широта центра |
 | `longitude` | string (decimal) | Долгота центра |
 | `radius_m` | integer (int64) | Радиус, м |
@@ -1366,7 +1492,11 @@ permission_classes_by_action = {
 | Поле | Тип | Обяз. | Описание |
 |---|---|---|---|
 | `name` | string | нет | Название |
-| `type` | object | нет | Тип |
+| `type` | enum: `warehouse` \| `branch` \| `checkpoint` \| `delivery` \| `custom` | нет | * `warehouse` - Склад
+* `branch` - Филиал
+* `checkpoint` - Контрольная точка
+* `delivery` - Зона доставки
+* `custom` - Произвольная |
 | `latitude` | string (decimal) | нет | Широта центра |
 | `longitude` | string (decimal) | нет | Долгота центра |
 | `radius_m` | integer (int64) | нет | Радиус, м |
@@ -1378,7 +1508,7 @@ permission_classes_by_action = {
 |---|---|---|
 | `id` | string (uuid) |  |
 | `name` | string | Название |
-| `type` | object | Тип |
+| `type` | enum: `warehouse` \| `branch` \| `checkpoint` \| `delivery` \| `custom` |  |
 | `latitude` | string (decimal) | Широта центра |
 | `longitude` | string (decimal) | Долгота центра |
 | `radius_m` | integer (int64) | Радиус, м |
@@ -1408,7 +1538,7 @@ permission_classes_by_action = {
 | `id` | string (uuid) |  |
 | `vehicle` | string (uuid) | Автомобиль |
 | `shipment` | string (uuid) | Рейс |
-| `type` | object | Тип |
+| `type` | enum: `stop` \| `long_stop` \| `enter_geofence` \| `exit_geofence` \| `route_deviation` \| `overspeed` \| `offline` |  |
 | `latitude` | string (decimal) | Широта |
 | `longitude` | string (decimal) | Долгота |
 | `details` | object | Детали |
@@ -1622,8 +1752,8 @@ Query-параметры:
 |---|---|---|
 | `id` | string (uuid) |  |
 | `name` | string | Название (ключ события) |
-| `type` | object | Канал |
-| `language` | object | Язык |
+| `type` | enum: `push` \| `sms` \| `email` \| `telegram` \| `in_app` |  |
+| `language` | enum: `ky` \| `ru` \| `en` |  |
 | `title` | string | Заголовок |
 | `body` | string | Шаблон текста |
 | `is_active` | boolean | Активен |
@@ -1646,8 +1776,14 @@ permission_classes_by_action = {
 | Поле | Тип | Обяз. | Описание |
 |---|---|---|---|
 | `name` | string | да | Название (ключ события) |
-| `type` | object | да | Канал |
-| `language` | object | нет | Язык |
+| `type` | enum: `push` \| `sms` \| `email` \| `telegram` \| `in_app` | да | * `push` - Push
+* `sms` - SMS
+* `email` - Email
+* `telegram` - Telegram
+* `in_app` - In-App |
+| `language` | enum: `ky` \| `ru` \| `en` | нет | * `ky` - Кыргызча
+* `ru` - Русский
+* `en` - English |
 | `title` | string | да | Заголовок |
 | `body` | string | да | Шаблон текста |
 | `is_active` | boolean | нет | Активен |
@@ -1658,8 +1794,8 @@ permission_classes_by_action = {
 |---|---|---|
 | `id` | string (uuid) |  |
 | `name` | string | Название (ключ события) |
-| `type` | object | Канал |
-| `language` | object | Язык |
+| `type` | enum: `push` \| `sms` \| `email` \| `telegram` \| `in_app` |  |
+| `language` | enum: `ky` \| `ru` \| `en` |  |
 | `title` | string | Заголовок |
 | `body` | string | Шаблон текста |
 | `is_active` | boolean | Активен |
@@ -1683,8 +1819,8 @@ permission_classes_by_action = {
 |---|---|---|
 | `id` | string (uuid) |  |
 | `name` | string | Название (ключ события) |
-| `type` | object | Канал |
-| `language` | object | Язык |
+| `type` | enum: `push` \| `sms` \| `email` \| `telegram` \| `in_app` |  |
+| `language` | enum: `ky` \| `ru` \| `en` |  |
 | `title` | string | Заголовок |
 | `body` | string | Шаблон текста |
 | `is_active` | boolean | Активен |
@@ -1707,8 +1843,14 @@ permission_classes_by_action = {
 | Поле | Тип | Обяз. | Описание |
 |---|---|---|---|
 | `name` | string | нет | Название (ключ события) |
-| `type` | object | нет | Канал |
-| `language` | object | нет | Язык |
+| `type` | enum: `push` \| `sms` \| `email` \| `telegram` \| `in_app` | нет | * `push` - Push
+* `sms` - SMS
+* `email` - Email
+* `telegram` - Telegram
+* `in_app` - In-App |
+| `language` | enum: `ky` \| `ru` \| `en` | нет | * `ky` - Кыргызча
+* `ru` - Русский
+* `en` - English |
 | `title` | string | нет | Заголовок |
 | `body` | string | нет | Шаблон текста |
 | `is_active` | boolean | нет | Активен |
@@ -1719,8 +1861,8 @@ permission_classes_by_action = {
 |---|---|---|
 | `id` | string (uuid) |  |
 | `name` | string | Название (ключ события) |
-| `type` | object | Канал |
-| `language` | object | Язык |
+| `type` | enum: `push` \| `sms` \| `email` \| `telegram` \| `in_app` |  |
+| `language` | enum: `ky` \| `ru` \| `en` |  |
 | `title` | string | Заголовок |
 | `body` | string | Шаблон текста |
 | `is_active` | boolean | Активен |
@@ -1774,9 +1916,9 @@ Query-параметры:
 | `id` | string (uuid) |  |
 | `title` | string | Заголовок |
 | `body` | string | Текст |
-| `type` | object | Канал |
-| `priority` | object | Приоритет |
-| `status` | object | Статус |
+| `type` | enum: `push` \| `sms` \| `email` \| `telegram` \| `in_app` |  |
+| `priority` | enum: `low` \| `normal` \| `high` \| `critical` |  |
+| `status` | enum: `pending` \| `queued` \| `sending` \| `sent` \| `delivered` \| `read` \| `failed` \| `cancelled` |  |
 | `event_type` | string | Событие-источник |
 | `is_read` | boolean | Прочитано |
 | `sent_at` | string (date-time) | Отправлено |
@@ -1795,7 +1937,10 @@ Query-параметры:
 | `user` | string (uuid) | да |  |
 | `title` | string | да |  |
 | `body` | string | да |  |
-| `priority` | object | нет |  |
+| `priority` | enum: `low` \| `normal` \| `high` \| `critical` | нет | * `low` - Низкий
+* `normal` - Обычный
+* `high` - Высокий
+* `critical` - Критический |
 
 Ответ (`data`):
 
@@ -1804,9 +1949,9 @@ Query-параметры:
 | `id` | string (uuid) |  |
 | `title` | string | Заголовок |
 | `body` | string | Текст |
-| `type` | object | Канал |
-| `priority` | object | Приоритет |
-| `status` | object | Статус |
+| `type` | enum: `push` \| `sms` \| `email` \| `telegram` \| `in_app` |  |
+| `priority` | enum: `low` \| `normal` \| `high` \| `critical` |  |
+| `status` | enum: `pending` \| `queued` \| `sending` \| `sent` \| `delivered` \| `read` \| `failed` \| `cancelled` |  |
 | `event_type` | string | Событие-источник |
 | `is_read` | boolean | Прочитано |
 | `sent_at` | string (date-time) | Отправлено |
@@ -1825,9 +1970,9 @@ Query-параметры:
 | `id` | string (uuid) |  |
 | `title` | string | Заголовок |
 | `body` | string | Текст |
-| `type` | object | Канал |
-| `priority` | object | Приоритет |
-| `status` | object | Статус |
+| `type` | enum: `push` \| `sms` \| `email` \| `telegram` \| `in_app` |  |
+| `priority` | enum: `low` \| `normal` \| `high` \| `critical` |  |
+| `status` | enum: `pending` \| `queued` \| `sending` \| `sent` \| `delivered` \| `read` \| `failed` \| `cancelled` |  |
 | `event_type` | string | Событие-источник |
 | `is_read` | boolean | Прочитано |
 | `sent_at` | string (date-time) | Отправлено |
@@ -1846,9 +1991,9 @@ Query-параметры:
 | `id` | string (uuid) |  |
 | `title` | string | Заголовок |
 | `body` | string | Текст |
-| `type` | object | Канал |
-| `priority` | object | Приоритет |
-| `status` | object | Статус |
+| `type` | enum: `push` \| `sms` \| `email` \| `telegram` \| `in_app` |  |
+| `priority` | enum: `low` \| `normal` \| `high` \| `critical` |  |
+| `status` | enum: `pending` \| `queued` \| `sending` \| `sent` \| `delivered` \| `read` \| `failed` \| `cancelled` |  |
 | `event_type` | string | Событие-источник |
 | `is_read` | boolean | Прочитано |
 | `sent_at` | string (date-time) | Отправлено |
@@ -1928,17 +2073,17 @@ Query-параметры:
 | `from_branch_name` | string |  |
 | `to_branch` | string (uuid) | Филиал назначения |
 | `to_branch_name` | string |  |
-| `payment_type` | object | Способ оплаты |
-| `delivery_type` | object | Тип доставки |
+| `payment_type` | enum: `cash` \| `card` \| `qr` \| `bank_transfer` \| `post_payment` |  |
+| `delivery_type` | enum: `branch_pickup` \| `door_delivery` |  |
 | `tariff` | string (uuid) | Тариф |
 | `total_price` | string (decimal) | Стоимость |
 | `insurance_price` | string (decimal) | Страховка |
 | `paid_amount` | string (decimal) | Оплачено |
-| `price_details` | object | Разбивка стоимости |
-| `status` | object | Статус |
+| `price_details` | object |  |
+| `status` | enum: `draft` \| `waiting_confirmation` \| `need_correction` \| `confirmed` \| `waiting_payment` \| `partially_paid` \| `paid` \| `waiting_receive` \| `received` \| `in_warehouse` \| `waiting_shipment` \| `loaded` \| `in_transit` \| `arrived` \| `ready_for_pickup` \| `delivered` \| `completed` \| `cancelled` \| `returned` \| `damaged` \| `lost` |  |
 | `comment` | string | Комментарий |
 | `version` | integer | Версия |
-| `packages` | array[object] |  |
+| `active_shipment` | object |  |
 
 ### `POST /api/v1/orders/`
 
@@ -1959,8 +2104,13 @@ Query-параметры:
 | `receiver_address` | string | нет |  |
 | `from_branch` | string (uuid) | да |  |
 | `to_branch` | string (uuid) | да |  |
-| `payment_type` | object | нет |  |
-| `delivery_type` | object | нет |  |
+| `payment_type` | enum: `cash` \| `card` \| `qr` \| `bank_transfer` \| `post_payment` | нет | * `cash` - Наличные
+* `card` - Карта
+* `qr` - QR-оплата
+* `bank_transfer` - Банковский перевод
+* `post_payment` - Постоплата |
+| `delivery_type` | enum: `branch_pickup` \| `door_delivery` | нет | * `branch_pickup` - Выдача в филиале
+* `door_delivery` - Доставка до двери |
 | `comment` | string | нет |  |
 | `packages` | array[object] | да |  |
 | `services` | array[string (uuid)] | нет |  |
@@ -1983,17 +2133,17 @@ Query-параметры:
 | `from_branch_name` | string |  |
 | `to_branch` | string (uuid) | Филиал назначения |
 | `to_branch_name` | string |  |
-| `payment_type` | object | Способ оплаты |
-| `delivery_type` | object | Тип доставки |
+| `payment_type` | enum: `cash` \| `card` \| `qr` \| `bank_transfer` \| `post_payment` |  |
+| `delivery_type` | enum: `branch_pickup` \| `door_delivery` |  |
 | `tariff` | string (uuid) | Тариф |
 | `total_price` | string (decimal) | Стоимость |
 | `insurance_price` | string (decimal) | Страховка |
 | `paid_amount` | string (decimal) | Оплачено |
-| `price_details` | object | Разбивка стоимости |
-| `status` | object | Статус |
+| `price_details` | object |  |
+| `status` | enum: `draft` \| `waiting_confirmation` \| `need_correction` \| `confirmed` \| `waiting_payment` \| `partially_paid` \| `paid` \| `waiting_receive` \| `received` \| `in_warehouse` \| `waiting_shipment` \| `loaded` \| `in_transit` \| `arrived` \| `ready_for_pickup` \| `delivered` \| `completed` \| `cancelled` \| `returned` \| `damaged` \| `lost` |  |
 | `comment` | string | Комментарий |
 | `version` | integer | Версия |
-| `packages` | array[object] |  |
+| `active_shipment` | object |  |
 
 ### `GET /api/v1/orders/{id}/`
 
@@ -2019,17 +2169,17 @@ Query-параметры:
 | `from_branch_name` | string |  |
 | `to_branch` | string (uuid) | Филиал назначения |
 | `to_branch_name` | string |  |
-| `payment_type` | object | Способ оплаты |
-| `delivery_type` | object | Тип доставки |
+| `payment_type` | enum: `cash` \| `card` \| `qr` \| `bank_transfer` \| `post_payment` |  |
+| `delivery_type` | enum: `branch_pickup` \| `door_delivery` |  |
 | `tariff` | string (uuid) | Тариф |
 | `total_price` | string (decimal) | Стоимость |
 | `insurance_price` | string (decimal) | Страховка |
 | `paid_amount` | string (decimal) | Оплачено |
-| `price_details` | object | Разбивка стоимости |
-| `status` | object | Статус |
+| `price_details` | object |  |
+| `status` | enum: `draft` \| `waiting_confirmation` \| `need_correction` \| `confirmed` \| `waiting_payment` \| `partially_paid` \| `paid` \| `waiting_receive` \| `received` \| `in_warehouse` \| `waiting_shipment` \| `loaded` \| `in_transit` \| `arrived` \| `ready_for_pickup` \| `delivered` \| `completed` \| `cancelled` \| `returned` \| `damaged` \| `lost` |  |
 | `comment` | string | Комментарий |
 | `version` | integer | Версия |
-| `packages` | array[object] |  |
+| `active_shipment` | object |  |
 
 ### `PATCH /api/v1/orders/{id}/`
 
@@ -2076,17 +2226,17 @@ Query-параметры:
 | `from_branch_name` | string |  |
 | `to_branch` | string (uuid) | Филиал назначения |
 | `to_branch_name` | string |  |
-| `payment_type` | object | Способ оплаты |
-| `delivery_type` | object | Тип доставки |
+| `payment_type` | enum: `cash` \| `card` \| `qr` \| `bank_transfer` \| `post_payment` |  |
+| `delivery_type` | enum: `branch_pickup` \| `door_delivery` |  |
 | `tariff` | string (uuid) | Тариф |
 | `total_price` | string (decimal) | Стоимость |
 | `insurance_price` | string (decimal) | Страховка |
 | `paid_amount` | string (decimal) | Оплачено |
-| `price_details` | object | Разбивка стоимости |
-| `status` | object | Статус |
+| `price_details` | object |  |
+| `status` | enum: `draft` \| `waiting_confirmation` \| `need_correction` \| `confirmed` \| `waiting_payment` \| `partially_paid` \| `paid` \| `waiting_receive` \| `received` \| `in_warehouse` \| `waiting_shipment` \| `loaded` \| `in_transit` \| `arrived` \| `ready_for_pickup` \| `delivered` \| `completed` \| `cancelled` \| `returned` \| `damaged` \| `lost` |  |
 | `comment` | string | Комментарий |
 | `version` | integer | Версия |
-| `packages` | array[object] |  |
+| `active_shipment` | object |  |
 
 ### `DELETE /api/v1/orders/{id}/`
 
@@ -2124,17 +2274,17 @@ Query-параметры:
 | `from_branch_name` | string |  |
 | `to_branch` | string (uuid) | Филиал назначения |
 | `to_branch_name` | string |  |
-| `payment_type` | object | Способ оплаты |
-| `delivery_type` | object | Тип доставки |
+| `payment_type` | enum: `cash` \| `card` \| `qr` \| `bank_transfer` \| `post_payment` |  |
+| `delivery_type` | enum: `branch_pickup` \| `door_delivery` |  |
 | `tariff` | string (uuid) | Тариф |
 | `total_price` | string (decimal) | Стоимость |
 | `insurance_price` | string (decimal) | Страховка |
 | `paid_amount` | string (decimal) | Оплачено |
-| `price_details` | object | Разбивка стоимости |
-| `status` | object | Статус |
+| `price_details` | object |  |
+| `status` | enum: `draft` \| `waiting_confirmation` \| `need_correction` \| `confirmed` \| `waiting_payment` \| `partially_paid` \| `paid` \| `waiting_receive` \| `received` \| `in_warehouse` \| `waiting_shipment` \| `loaded` \| `in_transit` \| `arrived` \| `ready_for_pickup` \| `delivered` \| `completed` \| `cancelled` \| `returned` \| `damaged` \| `lost` |  |
 | `comment` | string | Комментарий |
 | `version` | integer | Версия |
-| `packages` | array[object] |  |
+| `active_shipment` | object |  |
 
 ### `POST /api/v1/orders/{id}/confirm/`
 
@@ -2160,17 +2310,17 @@ Query-параметры:
 | `from_branch_name` | string |  |
 | `to_branch` | string (uuid) | Филиал назначения |
 | `to_branch_name` | string |  |
-| `payment_type` | object | Способ оплаты |
-| `delivery_type` | object | Тип доставки |
+| `payment_type` | enum: `cash` \| `card` \| `qr` \| `bank_transfer` \| `post_payment` |  |
+| `delivery_type` | enum: `branch_pickup` \| `door_delivery` |  |
 | `tariff` | string (uuid) | Тариф |
 | `total_price` | string (decimal) | Стоимость |
 | `insurance_price` | string (decimal) | Страховка |
 | `paid_amount` | string (decimal) | Оплачено |
-| `price_details` | object | Разбивка стоимости |
-| `status` | object | Статус |
+| `price_details` | object |  |
+| `status` | enum: `draft` \| `waiting_confirmation` \| `need_correction` \| `confirmed` \| `waiting_payment` \| `partially_paid` \| `paid` \| `waiting_receive` \| `received` \| `in_warehouse` \| `waiting_shipment` \| `loaded` \| `in_transit` \| `arrived` \| `ready_for_pickup` \| `delivered` \| `completed` \| `cancelled` \| `returned` \| `damaged` \| `lost` |  |
 | `comment` | string | Комментарий |
 | `version` | integer | Версия |
-| `packages` | array[object] |  |
+| `active_shipment` | object |  |
 
 ### `GET /api/v1/orders/{id}/history/`
 
@@ -2263,17 +2413,17 @@ Query-параметры:
 | `from_branch_name` | string |  |
 | `to_branch` | string (uuid) | Филиал назначения |
 | `to_branch_name` | string |  |
-| `payment_type` | object | Способ оплаты |
-| `delivery_type` | object | Тип доставки |
+| `payment_type` | enum: `cash` \| `card` \| `qr` \| `bank_transfer` \| `post_payment` |  |
+| `delivery_type` | enum: `branch_pickup` \| `door_delivery` |  |
 | `tariff` | string (uuid) | Тариф |
 | `total_price` | string (decimal) | Стоимость |
 | `insurance_price` | string (decimal) | Страховка |
 | `paid_amount` | string (decimal) | Оплачено |
-| `price_details` | object | Разбивка стоимости |
-| `status` | object | Статус |
+| `price_details` | object |  |
+| `status` | enum: `draft` \| `waiting_confirmation` \| `need_correction` \| `confirmed` \| `waiting_payment` \| `partially_paid` \| `paid` \| `waiting_receive` \| `received` \| `in_warehouse` \| `waiting_shipment` \| `loaded` \| `in_transit` \| `arrived` \| `ready_for_pickup` \| `delivered` \| `completed` \| `cancelled` \| `returned` \| `damaged` \| `lost` |  |
 | `comment` | string | Комментарий |
 | `version` | integer | Версия |
-| `packages` | array[object] |  |
+| `active_shipment` | object |  |
 
 ### `POST /api/v1/orders/{id}/pay/`
 
@@ -2305,17 +2455,17 @@ Query-параметры:
 | `from_branch_name` | string |  |
 | `to_branch` | string (uuid) | Филиал назначения |
 | `to_branch_name` | string |  |
-| `payment_type` | object | Способ оплаты |
-| `delivery_type` | object | Тип доставки |
+| `payment_type` | enum: `cash` \| `card` \| `qr` \| `bank_transfer` \| `post_payment` |  |
+| `delivery_type` | enum: `branch_pickup` \| `door_delivery` |  |
 | `tariff` | string (uuid) | Тариф |
 | `total_price` | string (decimal) | Стоимость |
 | `insurance_price` | string (decimal) | Страховка |
 | `paid_amount` | string (decimal) | Оплачено |
-| `price_details` | object | Разбивка стоимости |
-| `status` | object | Статус |
+| `price_details` | object |  |
+| `status` | enum: `draft` \| `waiting_confirmation` \| `need_correction` \| `confirmed` \| `waiting_payment` \| `partially_paid` \| `paid` \| `waiting_receive` \| `received` \| `in_warehouse` \| `waiting_shipment` \| `loaded` \| `in_transit` \| `arrived` \| `ready_for_pickup` \| `delivered` \| `completed` \| `cancelled` \| `returned` \| `damaged` \| `lost` |  |
 | `comment` | string | Комментарий |
 | `version` | integer | Версия |
-| `packages` | array[object] |  |
+| `active_shipment` | object |  |
 
 ### `POST /api/v1/orders/{id}/status/`
 
@@ -2369,17 +2519,17 @@ Query-параметры:
 | `from_branch_name` | string |  |
 | `to_branch` | string (uuid) | Филиал назначения |
 | `to_branch_name` | string |  |
-| `payment_type` | object | Способ оплаты |
-| `delivery_type` | object | Тип доставки |
+| `payment_type` | enum: `cash` \| `card` \| `qr` \| `bank_transfer` \| `post_payment` |  |
+| `delivery_type` | enum: `branch_pickup` \| `door_delivery` |  |
 | `tariff` | string (uuid) | Тариф |
 | `total_price` | string (decimal) | Стоимость |
 | `insurance_price` | string (decimal) | Страховка |
 | `paid_amount` | string (decimal) | Оплачено |
-| `price_details` | object | Разбивка стоимости |
-| `status` | object | Статус |
+| `price_details` | object |  |
+| `status` | enum: `draft` \| `waiting_confirmation` \| `need_correction` \| `confirmed` \| `waiting_payment` \| `partially_paid` \| `paid` \| `waiting_receive` \| `received` \| `in_warehouse` \| `waiting_shipment` \| `loaded` \| `in_transit` \| `arrived` \| `ready_for_pickup` \| `delivered` \| `completed` \| `cancelled` \| `returned` \| `damaged` \| `lost` |  |
 | `comment` | string | Комментарий |
 | `version` | integer | Версия |
-| `packages` | array[object] |  |
+| `active_shipment` | object |  |
 
 ### `POST /api/v1/orders/{id}/submit/`
 
@@ -2405,17 +2555,17 @@ Query-параметры:
 | `from_branch_name` | string |  |
 | `to_branch` | string (uuid) | Филиал назначения |
 | `to_branch_name` | string |  |
-| `payment_type` | object | Способ оплаты |
-| `delivery_type` | object | Тип доставки |
+| `payment_type` | enum: `cash` \| `card` \| `qr` \| `bank_transfer` \| `post_payment` |  |
+| `delivery_type` | enum: `branch_pickup` \| `door_delivery` |  |
 | `tariff` | string (uuid) | Тариф |
 | `total_price` | string (decimal) | Стоимость |
 | `insurance_price` | string (decimal) | Страховка |
 | `paid_amount` | string (decimal) | Оплачено |
-| `price_details` | object | Разбивка стоимости |
-| `status` | object | Статус |
+| `price_details` | object |  |
+| `status` | enum: `draft` \| `waiting_confirmation` \| `need_correction` \| `confirmed` \| `waiting_payment` \| `partially_paid` \| `paid` \| `waiting_receive` \| `received` \| `in_warehouse` \| `waiting_shipment` \| `loaded` \| `in_transit` \| `arrived` \| `ready_for_pickup` \| `delivered` \| `completed` \| `cancelled` \| `returned` \| `damaged` \| `lost` |  |
 | `comment` | string | Комментарий |
 | `version` | integer | Версия |
-| `packages` | array[object] |  |
+| `active_shipment` | object |  |
 
 ### `GET /api/v1/orders/{id}/tracking/`
 
@@ -2538,7 +2688,7 @@ Query-параметры:
 | `declared_price` | string (decimal) | Объявленная ценность |
 | `fragile` | boolean | Хрупкий |
 | `dangerous` | boolean | Опасный |
-| `status` | object | Статус |
+| `status` | enum: `created` \| `received` \| `checked` \| `stored` \| `waiting_loading` \| `loaded` \| `in_transit` \| `unloaded` \| `ready_for_pickup` \| `delivered` \| `returned` \| `damaged` \| `lost` |  |
 | `created_at` | string (date-time) | Создано |
 | `updated_at` | string (date-time) | Обновлено |
 
@@ -2582,7 +2732,7 @@ Query-параметры:
 | `declared_price` | string (decimal) | Объявленная ценность |
 | `fragile` | boolean | Хрупкий |
 | `dangerous` | boolean | Опасный |
-| `status` | object | Статус |
+| `status` | enum: `created` \| `received` \| `checked` \| `stored` \| `waiting_loading` \| `loaded` \| `in_transit` \| `unloaded` \| `ready_for_pickup` \| `delivered` \| `returned` \| `damaged` \| `lost` |  |
 | `created_at` | string (date-time) | Создано |
 | `updated_at` | string (date-time) | Обновлено |
 
@@ -2617,7 +2767,7 @@ Query-параметры:
 | `declared_price` | string (decimal) | Объявленная ценность |
 | `fragile` | boolean | Хрупкий |
 | `dangerous` | boolean | Опасный |
-| `status` | object | Статус |
+| `status` | enum: `created` \| `received` \| `checked` \| `stored` \| `waiting_loading` \| `loaded` \| `in_transit` \| `unloaded` \| `ready_for_pickup` \| `delivered` \| `returned` \| `damaged` \| `lost` |  |
 | `created_at` | string (date-time) | Создано |
 | `updated_at` | string (date-time) | Обновлено |
 
@@ -2646,7 +2796,7 @@ Query-параметры:
 | `declared_price` | string (decimal) | Объявленная ценность |
 | `fragile` | boolean | Хрупкий |
 | `dangerous` | boolean | Опасный |
-| `status` | object | Статус |
+| `status` | enum: `created` \| `received` \| `checked` \| `stored` \| `waiting_loading` \| `loaded` \| `in_transit` \| `unloaded` \| `ready_for_pickup` \| `delivered` \| `returned` \| `damaged` \| `lost` |  |
 | `created_at` | string (date-time) | Создано |
 | `updated_at` | string (date-time) | Обновлено |
 
@@ -2690,7 +2840,7 @@ Query-параметры:
 | `declared_price` | string (decimal) | Объявленная ценность |
 | `fragile` | boolean | Хрупкий |
 | `dangerous` | boolean | Опасный |
-| `status` | object | Статус |
+| `status` | enum: `created` \| `received` \| `checked` \| `stored` \| `waiting_loading` \| `loaded` \| `in_transit` \| `unloaded` \| `ready_for_pickup` \| `delivered` \| `returned` \| `damaged` \| `lost` |  |
 | `created_at` | string (date-time) | Создано |
 | `updated_at` | string (date-time) | Обновлено |
 
@@ -2725,7 +2875,7 @@ Query-параметры:
 | `declared_price` | string (decimal) | Объявленная ценность |
 | `fragile` | boolean | Хрупкий |
 | `dangerous` | boolean | Опасный |
-| `status` | object | Статус |
+| `status` | enum: `created` \| `received` \| `checked` \| `stored` \| `waiting_loading` \| `loaded` \| `in_transit` \| `unloaded` \| `ready_for_pickup` \| `delivered` \| `returned` \| `damaged` \| `lost` |  |
 | `created_at` | string (date-time) | Создано |
 | `updated_at` | string (date-time) | Обновлено |
 
@@ -2753,7 +2903,7 @@ Query-параметры:
 | `id` | string (uuid) |  |
 | `package` | string (uuid) | Груз |
 | `image` | string (uri) | Фото |
-| `type` | object | Этап |
+| `type` | enum: `receiving` \| `loading` \| `unloading` \| `delivery` \| `damage` |  |
 | `uploaded_by` | string (uuid) | Загрузил |
 | `created_at` | string (date-time) | Создано |
 
@@ -3152,7 +3302,7 @@ Query-параметры:
 | `planned_departure` | string (date-time) | План отправления |
 | `departure_time` | string (date-time) | Фактическое отправление |
 | `arrival_time` | string (date-time) | Фактическое прибытие |
-| `status` | object | Статус |
+| `status` | enum: `draft` \| `planned` \| `ready` \| `loading` \| `loaded` \| `started` \| `in_transit` \| `gps_lost` \| `arrived` \| `unloading` \| `completed` \| `cancelled` \| `failed` |  |
 | `version` | integer | Версия |
 | `items` | array[object] |  |
 | `created_at` | string (date-time) | Создано |
@@ -3194,7 +3344,7 @@ Query-параметры:
 | `planned_departure` | string (date-time) | План отправления |
 | `departure_time` | string (date-time) | Фактическое отправление |
 | `arrival_time` | string (date-time) | Фактическое прибытие |
-| `status` | object | Статус |
+| `status` | enum: `draft` \| `planned` \| `ready` \| `loading` \| `loaded` \| `started` \| `in_transit` \| `gps_lost` \| `arrived` \| `unloading` \| `completed` \| `cancelled` \| `failed` |  |
 | `version` | integer | Версия |
 | `items` | array[object] |  |
 | `created_at` | string (date-time) | Создано |
@@ -3225,7 +3375,7 @@ Query-параметры:
 | `planned_departure` | string (date-time) | План отправления |
 | `departure_time` | string (date-time) | Фактическое отправление |
 | `arrival_time` | string (date-time) | Фактическое прибытие |
-| `status` | object | Статус |
+| `status` | enum: `draft` \| `planned` \| `ready` \| `loading` \| `loaded` \| `started` \| `in_transit` \| `gps_lost` \| `arrived` \| `unloading` \| `completed` \| `cancelled` \| `failed` |  |
 | `version` | integer | Версия |
 | `items` | array[object] |  |
 | `created_at` | string (date-time) | Создано |
@@ -3256,7 +3406,7 @@ Query-параметры:
 | `planned_departure` | string (date-time) | План отправления |
 | `departure_time` | string (date-time) | Фактическое отправление |
 | `arrival_time` | string (date-time) | Фактическое прибытие |
-| `status` | object | Статус |
+| `status` | enum: `draft` \| `planned` \| `ready` \| `loading` \| `loaded` \| `started` \| `in_transit` \| `gps_lost` \| `arrived` \| `unloading` \| `completed` \| `cancelled` \| `failed` |  |
 | `version` | integer | Версия |
 | `items` | array[object] |  |
 | `created_at` | string (date-time) | Создано |
@@ -3299,7 +3449,7 @@ Query-параметры:
 | `planned_departure` | string (date-time) | План отправления |
 | `departure_time` | string (date-time) | Фактическое отправление |
 | `arrival_time` | string (date-time) | Фактическое прибытие |
-| `status` | object | Статус |
+| `status` | enum: `draft` \| `planned` \| `ready` \| `loading` \| `loaded` \| `started` \| `in_transit` \| `gps_lost` \| `arrived` \| `unloading` \| `completed` \| `cancelled` \| `failed` |  |
 | `version` | integer | Версия |
 | `items` | array[object] |  |
 | `created_at` | string (date-time) | Создано |
@@ -3330,7 +3480,7 @@ Query-параметры:
 | `planned_departure` | string (date-time) | План отправления |
 | `departure_time` | string (date-time) | Фактическое отправление |
 | `arrival_time` | string (date-time) | Фактическое прибытие |
-| `status` | object | Статус |
+| `status` | enum: `draft` \| `planned` \| `ready` \| `loading` \| `loaded` \| `started` \| `in_transit` \| `gps_lost` \| `arrived` \| `unloading` \| `completed` \| `cancelled` \| `failed` |  |
 | `version` | integer | Версия |
 | `items` | array[object] |  |
 | `created_at` | string (date-time) | Создано |
@@ -3367,7 +3517,7 @@ Query-параметры:
 | `planned_departure` | string (date-time) | План отправления |
 | `departure_time` | string (date-time) | Фактическое отправление |
 | `arrival_time` | string (date-time) | Фактическое прибытие |
-| `status` | object | Статус |
+| `status` | enum: `draft` \| `planned` \| `ready` \| `loading` \| `loaded` \| `started` \| `in_transit` \| `gps_lost` \| `arrived` \| `unloading` \| `completed` \| `cancelled` \| `failed` |  |
 | `version` | integer | Версия |
 | `items` | array[object] |  |
 | `created_at` | string (date-time) | Создано |
@@ -3404,7 +3554,7 @@ Query-параметры:
 | `planned_departure` | string (date-time) | План отправления |
 | `departure_time` | string (date-time) | Фактическое отправление |
 | `arrival_time` | string (date-time) | Фактическое прибытие |
-| `status` | object | Статус |
+| `status` | enum: `draft` \| `planned` \| `ready` \| `loading` \| `loaded` \| `started` \| `in_transit` \| `gps_lost` \| `arrived` \| `unloading` \| `completed` \| `cancelled` \| `failed` |  |
 | `version` | integer | Версия |
 | `items` | array[object] |  |
 | `created_at` | string (date-time) | Создано |
@@ -3435,7 +3585,7 @@ Query-параметры:
 | `planned_departure` | string (date-time) | План отправления |
 | `departure_time` | string (date-time) | Фактическое отправление |
 | `arrival_time` | string (date-time) | Фактическое прибытие |
-| `status` | object | Статус |
+| `status` | enum: `draft` \| `planned` \| `ready` \| `loading` \| `loaded` \| `started` \| `in_transit` \| `gps_lost` \| `arrived` \| `unloading` \| `completed` \| `cancelled` \| `failed` |  |
 | `version` | integer | Версия |
 | `items` | array[object] |  |
 | `created_at` | string (date-time) | Создано |
@@ -3522,7 +3672,7 @@ Query-параметры:
 |---|---|---|
 | `id` | string (uuid) |  |
 | `shipment` | string (uuid) | Рейс |
-| `type` | object | Тип |
+| `type` | enum: `accident` \| `breakdown` \| `delay` \| `traffic` \| `weather` \| `damage` \| `loss` \| `other` |  |
 | `description` | string | Описание |
 | `photo` | string (uri) | Фото |
 | `latitude` | string (decimal) | Широта |
@@ -3584,7 +3734,7 @@ Query-параметры:
 |---|---|---|
 | `id` | string (uuid) |  |
 | `shipment` | string (uuid) | Рейс |
-| `type` | object | Тип |
+| `type` | enum: `accident` \| `breakdown` \| `delay` \| `traffic` \| `weather` \| `damage` \| `loss` \| `other` |  |
 | `description` | string | Описание |
 | `photo` | string (uri) | Фото |
 | `latitude` | string (decimal) | Широта |
@@ -3623,7 +3773,7 @@ Query-параметры:
 | `planned_departure` | string (date-time) | План отправления |
 | `departure_time` | string (date-time) | Фактическое отправление |
 | `arrival_time` | string (date-time) | Фактическое прибытие |
-| `status` | object | Статус |
+| `status` | enum: `draft` \| `planned` \| `ready` \| `loading` \| `loaded` \| `started` \| `in_transit` \| `gps_lost` \| `arrived` \| `unloading` \| `completed` \| `cancelled` \| `failed` |  |
 | `version` | integer | Версия |
 | `items` | array[object] |  |
 | `created_at` | string (date-time) | Создано |
@@ -3654,7 +3804,7 @@ Query-параметры:
 | `planned_departure` | string (date-time) | План отправления |
 | `departure_time` | string (date-time) | Фактическое отправление |
 | `arrival_time` | string (date-time) | Фактическое прибытие |
-| `status` | object | Статус |
+| `status` | enum: `draft` \| `planned` \| `ready` \| `loading` \| `loaded` \| `started` \| `in_transit` \| `gps_lost` \| `arrived` \| `unloading` \| `completed` \| `cancelled` \| `failed` |  |
 | `version` | integer | Версия |
 | `items` | array[object] |  |
 | `created_at` | string (date-time) | Создано |
@@ -3685,7 +3835,7 @@ Query-параметры:
 | `planned_departure` | string (date-time) | План отправления |
 | `departure_time` | string (date-time) | Фактическое отправление |
 | `arrival_time` | string (date-time) | Фактическое прибытие |
-| `status` | object | Статус |
+| `status` | enum: `draft` \| `planned` \| `ready` \| `loading` \| `loaded` \| `started` \| `in_transit` \| `gps_lost` \| `arrived` \| `unloading` \| `completed` \| `cancelled` \| `failed` |  |
 | `version` | integer | Версия |
 | `items` | array[object] |  |
 | `created_at` | string (date-time) | Создано |
@@ -3716,7 +3866,7 @@ Query-параметры:
 | `planned_departure` | string (date-time) | План отправления |
 | `departure_time` | string (date-time) | Фактическое отправление |
 | `arrival_time` | string (date-time) | Фактическое прибытие |
-| `status` | object | Статус |
+| `status` | enum: `draft` \| `planned` \| `ready` \| `loading` \| `loaded` \| `started` \| `in_transit` \| `gps_lost` \| `arrived` \| `unloading` \| `completed` \| `cancelled` \| `failed` |  |
 | `version` | integer | Версия |
 | `items` | array[object] |  |
 | `created_at` | string (date-time) | Создано |
@@ -3747,7 +3897,7 @@ Query-параметры:
 | `planned_departure` | string (date-time) | План отправления |
 | `departure_time` | string (date-time) | Фактическое отправление |
 | `arrival_time` | string (date-time) | Фактическое прибытие |
-| `status` | object | Статус |
+| `status` | enum: `draft` \| `planned` \| `ready` \| `loading` \| `loaded` \| `started` \| `in_transit` \| `gps_lost` \| `arrived` \| `unloading` \| `completed` \| `cancelled` \| `failed` |  |
 | `version` | integer | Версия |
 | `items` | array[object] |  |
 | `created_at` | string (date-time) | Создано |
@@ -3784,7 +3934,7 @@ Query-параметры:
 | `planned_departure` | string (date-time) | План отправления |
 | `departure_time` | string (date-time) | Фактическое отправление |
 | `arrival_time` | string (date-time) | Фактическое прибытие |
-| `status` | object | Статус |
+| `status` | enum: `draft` \| `planned` \| `ready` \| `loading` \| `loaded` \| `started` \| `in_transit` \| `gps_lost` \| `arrived` \| `unloading` \| `completed` \| `cancelled` \| `failed` |  |
 | `version` | integer | Версия |
 | `items` | array[object] |  |
 | `created_at` | string (date-time) | Создано |
@@ -3815,7 +3965,7 @@ Query-параметры:
 | `planned_departure` | string (date-time) | План отправления |
 | `departure_time` | string (date-time) | Фактическое отправление |
 | `arrival_time` | string (date-time) | Фактическое прибытие |
-| `status` | object | Статус |
+| `status` | enum: `draft` \| `planned` \| `ready` \| `loading` \| `loaded` \| `started` \| `in_transit` \| `gps_lost` \| `arrived` \| `unloading` \| `completed` \| `cancelled` \| `failed` |  |
 | `version` | integer | Версия |
 | `items` | array[object] |  |
 | `created_at` | string (date-time) | Создано |
@@ -3852,7 +4002,7 @@ Query-параметры:
 | `planned_departure` | string (date-time) | План отправления |
 | `departure_time` | string (date-time) | Фактическое отправление |
 | `arrival_time` | string (date-time) | Фактическое прибытие |
-| `status` | object | Статус |
+| `status` | enum: `draft` \| `planned` \| `ready` \| `loading` \| `loaded` \| `started` \| `in_transit` \| `gps_lost` \| `arrived` \| `unloading` \| `completed` \| `cancelled` \| `failed` |  |
 | `version` | integer | Версия |
 | `items` | array[object] |  |
 | `created_at` | string (date-time) | Создано |
@@ -3883,7 +4033,7 @@ Query-параметры:
 | `planned_departure` | string (date-time) | План отправления |
 | `departure_time` | string (date-time) | Фактическое отправление |
 | `arrival_time` | string (date-time) | Фактическое прибытие |
-| `status` | object | Статус |
+| `status` | enum: `draft` \| `planned` \| `ready` \| `loading` \| `loaded` \| `started` \| `in_transit` \| `gps_lost` \| `arrived` \| `unloading` \| `completed` \| `cancelled` \| `failed` |  |
 | `version` | integer | Версия |
 | `items` | array[object] |  |
 | `created_at` | string (date-time) | Создано |
@@ -4286,9 +4436,9 @@ Query-параметры:
 | `first_name` | string | Имя |
 | `middle_name` | string | Отчество |
 | `full_name` | string |  |
-| `role` | object | Роль |
+| `role` | enum: `client` \| `operator` \| `warehouse` \| `driver` \| `finance` \| `director` \| `superadmin` |  |
 | `avatar` | string (uri) | Аватар |
-| `language` | object | Язык |
+| `language` | enum: `ky` \| `ru` \| `en` |  |
 | `timezone` | string | Часовой пояс |
 | `is_verified` | boolean | Подтверждён |
 | `is_active` | boolean | Активен |
@@ -4353,9 +4503,9 @@ Query-параметры:
 | `first_name` | string | Имя |
 | `middle_name` | string | Отчество |
 | `full_name` | string |  |
-| `role` | object | Роль |
+| `role` | enum: `client` \| `operator` \| `warehouse` \| `driver` \| `finance` \| `director` \| `superadmin` |  |
 | `avatar` | string (uri) | Аватар |
-| `language` | object | Язык |
+| `language` | enum: `ky` \| `ru` \| `en` |  |
 | `timezone` | string | Часовой пояс |
 | `is_verified` | boolean | Подтверждён |
 | `is_active` | boolean | Активен |
@@ -4381,9 +4531,9 @@ Query-параметры:
 | `first_name` | string | Имя |
 | `middle_name` | string | Отчество |
 | `full_name` | string |  |
-| `role` | object | Роль |
+| `role` | enum: `client` \| `operator` \| `warehouse` \| `driver` \| `finance` \| `director` \| `superadmin` |  |
 | `avatar` | string (uri) | Аватар |
-| `language` | object | Язык |
+| `language` | enum: `ky` \| `ru` \| `en` |  |
 | `timezone` | string | Часовой пояс |
 | `is_verified` | boolean | Подтверждён |
 | `is_active` | boolean | Активен |
@@ -4447,9 +4597,9 @@ Query-параметры:
 | `first_name` | string | Имя |
 | `middle_name` | string | Отчество |
 | `full_name` | string |  |
-| `role` | object | Роль |
+| `role` | enum: `client` \| `operator` \| `warehouse` \| `driver` \| `finance` \| `director` \| `superadmin` |  |
 | `avatar` | string (uri) | Аватар |
-| `language` | object | Язык |
+| `language` | enum: `ky` \| `ru` \| `en` |  |
 | `timezone` | string | Часовой пояс |
 | `is_verified` | boolean | Подтверждён |
 | `is_active` | boolean | Активен |
@@ -4662,9 +4812,9 @@ Query-параметры:
 | `color` | string | Цвет |
 | `max_weight` | string (decimal) | Макс. вес, кг |
 | `max_volume` | string (decimal) | Макс. объём, м³ |
-| `fuel_type` | object | Топливо |
+| `fuel_type` | enum: `petrol` \| `diesel` \| `gas` \| `electric` \| `hybrid` |  |
 | `mileage` | integer (int64) | Пробег, км |
-| `status` | object | Статус |
+| `status` | enum: `available` \| `busy` \| `maintenance` \| `inactive` |  |
 | `current_driver` | string (uuid) | Текущий водитель |
 | `driver_phone` | string |  |
 | `driver_name` | string |  |
@@ -4697,9 +4847,16 @@ permission_classes_by_action = {
 | `color` | string | нет | Цвет |
 | `max_weight` | string (decimal) | да | Макс. вес, кг |
 | `max_volume` | string (decimal) | да | Макс. объём, м³ |
-| `fuel_type` | object | нет | Топливо |
+| `fuel_type` | enum: `petrol` \| `diesel` \| `gas` \| `electric` \| `hybrid` | нет | * `petrol` - Бензин
+* `diesel` - Дизель
+* `gas` - Газ
+* `electric` - Электро
+* `hybrid` - Гибрид |
 | `mileage` | integer (int64) | нет | Пробег, км |
-| `status` | object | нет | Статус |
+| `status` | enum: `available` \| `busy` \| `maintenance` \| `inactive` | нет | * `available` - Свободен
+* `busy` - В рейсе
+* `maintenance` - На обслуживании
+* `inactive` - Не используется |
 | `is_active` | boolean | нет | Активен |
 
 Ответ (`data`):
@@ -4719,9 +4876,9 @@ permission_classes_by_action = {
 | `color` | string | Цвет |
 | `max_weight` | string (decimal) | Макс. вес, кг |
 | `max_volume` | string (decimal) | Макс. объём, м³ |
-| `fuel_type` | object | Топливо |
+| `fuel_type` | enum: `petrol` \| `diesel` \| `gas` \| `electric` \| `hybrid` |  |
 | `mileage` | integer (int64) | Пробег, км |
-| `status` | object | Статус |
+| `status` | enum: `available` \| `busy` \| `maintenance` \| `inactive` |  |
 | `current_driver` | string (uuid) | Текущий водитель |
 | `driver_phone` | string |  |
 | `driver_name` | string |  |
@@ -4757,9 +4914,9 @@ permission_classes_by_action = {
 | `color` | string | Цвет |
 | `max_weight` | string (decimal) | Макс. вес, кг |
 | `max_volume` | string (decimal) | Макс. объём, м³ |
-| `fuel_type` | object | Топливо |
+| `fuel_type` | enum: `petrol` \| `diesel` \| `gas` \| `electric` \| `hybrid` |  |
 | `mileage` | integer (int64) | Пробег, км |
-| `status` | object | Статус |
+| `status` | enum: `available` \| `busy` \| `maintenance` \| `inactive` |  |
 | `current_driver` | string (uuid) | Текущий водитель |
 | `driver_phone` | string |  |
 | `driver_name` | string |  |
@@ -4792,9 +4949,16 @@ permission_classes_by_action = {
 | `color` | string | нет | Цвет |
 | `max_weight` | string (decimal) | нет | Макс. вес, кг |
 | `max_volume` | string (decimal) | нет | Макс. объём, м³ |
-| `fuel_type` | object | нет | Топливо |
+| `fuel_type` | enum: `petrol` \| `diesel` \| `gas` \| `electric` \| `hybrid` | нет | * `petrol` - Бензин
+* `diesel` - Дизель
+* `gas` - Газ
+* `electric` - Электро
+* `hybrid` - Гибрид |
 | `mileage` | integer (int64) | нет | Пробег, км |
-| `status` | object | нет | Статус |
+| `status` | enum: `available` \| `busy` \| `maintenance` \| `inactive` | нет | * `available` - Свободен
+* `busy` - В рейсе
+* `maintenance` - На обслуживании
+* `inactive` - Не используется |
 | `is_active` | boolean | нет | Активен |
 
 Ответ (`data`):
@@ -4814,9 +4978,9 @@ permission_classes_by_action = {
 | `color` | string | Цвет |
 | `max_weight` | string (decimal) | Макс. вес, кг |
 | `max_volume` | string (decimal) | Макс. объём, м³ |
-| `fuel_type` | object | Топливо |
+| `fuel_type` | enum: `petrol` \| `diesel` \| `gas` \| `electric` \| `hybrid` |  |
 | `mileage` | integer (int64) | Пробег, км |
-| `status` | object | Статус |
+| `status` | enum: `available` \| `busy` \| `maintenance` \| `inactive` |  |
 | `current_driver` | string (uuid) | Текущий водитель |
 | `driver_phone` | string |  |
 | `driver_name` | string |  |
@@ -4869,9 +5033,9 @@ permission_classes_by_action = {
 | `color` | string | Цвет |
 | `max_weight` | string (decimal) | Макс. вес, кг |
 | `max_volume` | string (decimal) | Макс. объём, м³ |
-| `fuel_type` | object | Топливо |
+| `fuel_type` | enum: `petrol` \| `diesel` \| `gas` \| `electric` \| `hybrid` |  |
 | `mileage` | integer (int64) | Пробег, км |
-| `status` | object | Статус |
+| `status` | enum: `available` \| `busy` \| `maintenance` \| `inactive` |  |
 | `current_driver` | string (uuid) | Текущий водитель |
 | `driver_phone` | string |  |
 | `driver_name` | string |  |
@@ -4907,9 +5071,9 @@ permission_classes_by_action = {
 | `color` | string | Цвет |
 | `max_weight` | string (decimal) | Макс. вес, кг |
 | `max_volume` | string (decimal) | Макс. объём, м³ |
-| `fuel_type` | object | Топливо |
+| `fuel_type` | enum: `petrol` \| `diesel` \| `gas` \| `electric` \| `hybrid` |  |
 | `mileage` | integer (int64) | Пробег, км |
-| `status` | object | Статус |
+| `status` | enum: `available` \| `busy` \| `maintenance` \| `inactive` |  |
 | `current_driver` | string (uuid) | Текущий водитель |
 | `driver_phone` | string |  |
 | `driver_name` | string |  |
@@ -4981,7 +5145,7 @@ permission_classes_by_action = {
 | `declared_price` | string (decimal) | Объявленная ценность |
 | `fragile` | boolean | Хрупкий |
 | `dangerous` | boolean | Опасный |
-| `status` | object | Статус |
+| `status` | enum: `created` \| `received` \| `checked` \| `stored` \| `waiting_loading` \| `loaded` \| `in_transit` \| `unloaded` \| `ready_for_pickup` \| `delivered` \| `returned` \| `damaged` \| `lost` |  |
 | `created_at` | string (date-time) | Создано |
 | `updated_at` | string (date-time) | Обновлено |
 
@@ -5117,7 +5281,7 @@ permission_classes_by_action = {
 | `declared_price` | string (decimal) | Объявленная ценность |
 | `fragile` | boolean | Хрупкий |
 | `dangerous` | boolean | Опасный |
-| `status` | object | Статус |
+| `status` | enum: `created` \| `received` \| `checked` \| `stored` \| `waiting_loading` \| `loaded` \| `in_transit` \| `unloaded` \| `ready_for_pickup` \| `delivered` \| `returned` \| `damaged` \| `lost` |  |
 | `created_at` | string (date-time) | Создано |
 | `updated_at` | string (date-time) | Обновлено |
 
@@ -5150,7 +5314,7 @@ permission_classes_by_action = {
 | `declared_price` | string (decimal) | Объявленная ценность |
 | `fragile` | boolean | Хрупкий |
 | `dangerous` | boolean | Опасный |
-| `status` | object | Статус |
+| `status` | enum: `created` \| `received` \| `checked` \| `stored` \| `waiting_loading` \| `loaded` \| `in_transit` \| `unloaded` \| `ready_for_pickup` \| `delivered` \| `returned` \| `damaged` \| `lost` |  |
 | `created_at` | string (date-time) | Создано |
 | `updated_at` | string (date-time) | Обновлено |
 
@@ -5185,7 +5349,7 @@ permission_classes_by_action = {
 | `declared_price` | string (decimal) | Объявленная ценность |
 | `fragile` | boolean | Хрупкий |
 | `dangerous` | boolean | Опасный |
-| `status` | object | Статус |
+| `status` | enum: `created` \| `received` \| `checked` \| `stored` \| `waiting_loading` \| `loaded` \| `in_transit` \| `unloaded` \| `ready_for_pickup` \| `delivered` \| `returned` \| `damaged` \| `lost` |  |
 | `created_at` | string (date-time) | Создано |
 | `updated_at` | string (date-time) | Обновлено |
 
@@ -5457,7 +5621,7 @@ Query-параметры:
 | `warehouse_code` | string |  |
 | `name` | string | Название |
 | `code` | string | Код |
-| `type` | object | Тип |
+| `type` | enum: `receiving` \| `storage` \| `dispatch` \| `return` \| `damaged` \| `archive` |  |
 | `is_active` | boolean | Активен |
 | `created_at` | string (date-time) | Создано |
 | `updated_at` | string (date-time) | Обновлено |
@@ -5480,7 +5644,12 @@ permission_classes_by_action = {
 | `warehouse` | string (uuid) | да | Склад |
 | `name` | string | да | Название |
 | `code` | string | да | Код |
-| `type` | object | нет | Тип |
+| `type` | enum: `receiving` \| `storage` \| `dispatch` \| `return` \| `damaged` \| `archive` | нет | * `receiving` - Приёмка
+* `storage` - Хранение
+* `dispatch` - Отгрузка
+* `return` - Возвраты
+* `damaged` - Повреждённые
+* `archive` - Архив |
 | `is_active` | boolean | нет | Активен |
 
 Ответ (`data`):
@@ -5492,7 +5661,7 @@ permission_classes_by_action = {
 | `warehouse_code` | string |  |
 | `name` | string | Название |
 | `code` | string | Код |
-| `type` | object | Тип |
+| `type` | enum: `receiving` \| `storage` \| `dispatch` \| `return` \| `damaged` \| `archive` |  |
 | `is_active` | boolean | Активен |
 | `created_at` | string (date-time) | Создано |
 | `updated_at` | string (date-time) | Обновлено |
@@ -5517,7 +5686,7 @@ permission_classes_by_action = {
 | `warehouse_code` | string |  |
 | `name` | string | Название |
 | `code` | string | Код |
-| `type` | object | Тип |
+| `type` | enum: `receiving` \| `storage` \| `dispatch` \| `return` \| `damaged` \| `archive` |  |
 | `is_active` | boolean | Активен |
 | `created_at` | string (date-time) | Создано |
 | `updated_at` | string (date-time) | Обновлено |
@@ -5540,7 +5709,12 @@ permission_classes_by_action = {
 | `warehouse` | string (uuid) | нет | Склад |
 | `name` | string | нет | Название |
 | `code` | string | нет | Код |
-| `type` | object | нет | Тип |
+| `type` | enum: `receiving` \| `storage` \| `dispatch` \| `return` \| `damaged` \| `archive` | нет | * `receiving` - Приёмка
+* `storage` - Хранение
+* `dispatch` - Отгрузка
+* `return` - Возвраты
+* `damaged` - Повреждённые
+* `archive` - Архив |
 | `is_active` | boolean | нет | Активен |
 
 Ответ (`data`):
@@ -5552,7 +5726,7 @@ permission_classes_by_action = {
 | `warehouse_code` | string |  |
 | `name` | string | Название |
 | `code` | string | Код |
-| `type` | object | Тип |
+| `type` | enum: `receiving` \| `storage` \| `dispatch` \| `return` \| `damaged` \| `archive` |  |
 | `is_active` | boolean | Активен |
 | `created_at` | string (date-time) | Создано |
 | `updated_at` | string (date-time) | Обновлено |

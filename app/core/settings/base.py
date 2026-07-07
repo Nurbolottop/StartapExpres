@@ -76,6 +76,7 @@ MIDDLEWARE = [
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'apps.common.middleware.RequestContextMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.locale.LocaleMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -356,7 +357,21 @@ TIME_ZONE = os.getenv('TIME_ZONE', 'Asia/Bishkek')
 USE_I18N = True
 USE_TZ = True
 
+# Языки API: message и ошибки локализуются по Accept-Language (ru|ky|en)
+LANGUAGES = [
+    ('ru', 'Русский'),
+    ('ky', 'Кыргызча'),
+    ('en', 'English'),
+]
+LOCALE_PATHS = [BASE_DIR / 'locale']
+
 CELERY_TIMEZONE = TIME_ZONE
+
+# =============================================================================
+# INTEGRATIONS (Provider Interface — ТЗ, раздел 16)
+# =============================================================================
+# Путь к JSON сервисного аккаунта Firebase; пусто — push пишется в лог
+FIREBASE_CREDENTIALS_FILE = os.getenv('FIREBASE_CREDENTIALS_FILE', '')
 
 # =============================================================================
 # STATIC & MEDIA FILES

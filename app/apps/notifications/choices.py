@@ -20,6 +20,11 @@ class NotificationStatus(models.TextChoices):
     CANCELLED = 'cancelled', 'Отменено'
 
 
+class DevicePlatform(models.TextChoices):
+    ANDROID = 'android', 'Android'
+    IOS = 'ios', 'iOS'
+
+
 class NotificationPriority(models.TextChoices):
     LOW = 'low', 'Низкий'
     NORMAL = 'normal', 'Обычный'

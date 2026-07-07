@@ -10,6 +10,9 @@ django-cors-headers~=4.7.0
 argon2-cffi~=23.1
 cryptography~=45.0
 
+# Integrations
+firebase-admin~=6.5  # push (FCM); активируется через FIREBASE_CREDENTIALS_FILE
+
 # Infrastructure
 celery[redis]~=5.5.0
 django-redis~=6.0.0

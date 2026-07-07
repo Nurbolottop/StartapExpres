@@ -27,6 +27,7 @@ CLIENT_ORDER_EVENTS = frozenset(
 def handle_event(event: events.Event) -> None:
     if event.type not in CLIENT_ORDER_EVENTS:
         return
+    from apps.notifications.choices import NotificationType
     from apps.notifications.services import NotificationService
     from apps.orders.models import Order
 
@@ -41,6 +42,7 @@ def handle_event(event: events.Event) -> None:
             'order': order.order_number,
             'price': order.total_price,
         },
+        channels=(NotificationType.IN_APP, NotificationType.PUSH),
     )
 
 

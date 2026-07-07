@@ -1,0 +1,134 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-07 10:51+0600\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+#: apps/common/exceptions.py:104
+msgid "Объект используется другими записями и не может быть удалён."
+msgstr "Объект башка жазуулар менен байланышкан, өчүрүлбөйт."
+
+#: apps/common/exceptions.py:119
+msgid "Ошибка валидации данных."
+msgstr "Маалыматтарды текшерүү катасы."
+
+#: apps/common/exceptions.py:136
+msgid "Ошибка запроса."
+msgstr "Сурам катасы."
+
+#: apps/common/renderers.py:8 apps/common/renderers.py:30
+msgid "Success"
+msgstr "Ийгиликтүү"
+
+#: apps/common/renderers.py:9
+msgid "Created successfully"
+msgstr "Ийгиликтүү түзүлдү"
+
+#: apps/common/renderers.py:10
+msgid "Deleted successfully"
+msgstr "Ийгиликтүү өчүрүлдү"
+
+#: apps/notifications/views.py:60
+msgid "Устройство не найдено."
+msgstr "Түзмөк табылган жок."
+
+#: apps/notifications/views.py:112
+msgid "Получатель не найден."
+msgstr "Алуучу табылган жок."
+
+#: apps/orders/exceptions.py:9
+msgid "Недопустимый переход статуса заказа."
+msgstr "Буйрутманын статусун өзгөртүүгө болбойт."
+
+#: apps/orders/exceptions.py:14
+msgid "Роль не позволяет выполнить этот переход статуса."
+msgstr "Ролуңуз бул статус өзгөртүүнү аткара албайт."
+
+#: apps/orders/exceptions.py:19
+msgid "Заказ отправлен и больше не может быть изменён."
+msgstr "Буйрутма жөнөтүлдү, эми өзгөртүлбөйт."
+
+#: apps/orders/exceptions.py:24
+msgid "После подтверждения нельзя менять стороны, филиалы и стоимость."
+msgstr "Тастыктагандан кийин тараптарды, филиалдарды жана баасын өзгөртүүгө болбойт."
+
+#: apps/orders/exceptions.py:29
+msgid "Заказ был изменён другим пользователем. Обновите данные."
+msgstr "Буйрутманы башка колдонуучу өзгөрттү. Маалыматты жаңыртыңыз."
+
+#: apps/orders/exceptions.py:34
+msgid "Заказ уже оплачен."
+msgstr "Буйрутма мурда төлөнгөн."
+
+#: apps/orders/exceptions.py:39
+msgid "Заказ должен содержать хотя бы одно грузовое место."
+msgstr "Буйрутмада кеминде бир жүк орду болушу керек."
+
+#: apps/orders/exceptions.py:44
+msgid "Клиент может отменить заказ только до подтверждения."
+msgstr "Кардар буйрутманы тастыктаганга чейин гана жокко чыгара алат."
+
+#: apps/users/exceptions.py:15
+msgid "Неверный или истёкший код подтверждения."
+msgstr "Тастыктоо коду туура эмес же мөөнөтү бүткөн."
+
+#: apps/users/exceptions.py:20
+msgid "Код уже отправлен. Повторный запрос — через минуту."
+msgstr "Код мурда жөнөтүлдү. Кайра сурам — бир мүнөттөн кийин."
+
+#: apps/users/exceptions.py:25
+msgid "Неверный телефон или пароль."
+msgstr "Телефон же сырсөз туура эмес."
+
+#: apps/users/exceptions.py:31
+msgid "Пользователь заблокирован."
+msgstr "Колдонуучу бөгөттөлгөн."
+
+#: apps/users/exceptions.py:36
+msgid "Слишком много попыток входа. Повторите через 30 минут."
+msgstr "Кирүү аракети өтө көп. 30 мүнөттөн кийин кайталаңыз."
+
+#: apps/users/exceptions.py:41
+msgid "Недействительный refresh-токен."
+msgstr "Refresh-токен жараксыз."
+
+#: apps/users/exceptions.py:47
+msgid "Сессия не найдена."
+msgstr "Сессия табылган жок."
+
+#: apps/users/exceptions.py:52
+msgid "Нельзя удалить или заблокировать последнего суперадминистратора."
+msgstr "Акыркы суперадминди өчүрүүгө же бөгөттөөгө болбойт."
+
+#: apps/users/exceptions.py:57
+msgid "Нельзя заблокировать или удалить самого себя."
+msgstr "Өзүңүздү бөгөттөй же өчүрө албайсыз."
+
+#: apps/users/exceptions.py:62
+msgid "Назначение этой роли недоступно."
+msgstr "Бул ролду ыйгаруу мүмкүн эмес."
+
+#: apps/users/otp.py:60
+msgid "Превышено число попыток. Запросите новый код."
+msgstr "Аракет саны ашты. Жаңы код сураңыз."
+
+#: apps/users/services.py:147
+msgid "Вход заблокирован. Обратитесь к администратору."
+msgstr "Кирүү бөгөттөлгөн. Администраторго кайрылыңыз."
+
+#: apps/users/services.py:306
+msgid "Текущий пароль указан неверно."
+msgstr ""

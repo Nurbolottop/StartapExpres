@@ -9,6 +9,9 @@ done
 echo "Применяем миграции..."
 python manage.py migrate --noinput
 
+echo "Компилируем переводы (ru/ky/en)..."
+python manage.py compilemessages
+
 echo "Собираем статические файлы..."
 python manage.py collectstatic --noinput
 

@@ -1,20 +1,64 @@
+from django.utils.translation import gettext as _
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet
 
+from apps.common.exceptions import NotFoundException
 from apps.common.permissions import ActionPermissionsMixin, RolePermission
 from apps.notifications.choices import NotificationStatus, NotificationType
-from apps.notifications.models import Notification, NotificationTemplate
+from apps.notifications.models import Device, Notification, NotificationTemplate
 from apps.notifications.serializers import (
+    DeviceRegisterSerializer,
+    DeviceSerializer,
     NotificationSendSerializer,
     NotificationSerializer,
     NotificationTemplateSerializer,
 )
-from apps.notifications.services import NotificationService
+from apps.notifications.services import DeviceService, NotificationService
 from apps.users.choices import Roles
+
+
+class DeviceRegisterView(APIView):
+    """Привязка FCM/APNs-токена устройства к пользователю (push-уведомления)."""
+
+    @extend_schema(
+        request=DeviceRegisterSerializer,
+        responses={201: DeviceSerializer},
+        summary='Регистрация push-токена устройства',
+        tags=['auth'],
+    )
+    def post(self, request):
+        serializer = DeviceRegisterSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        device = DeviceService.register(user=request.user, **serializer.validated_data)
+        return Response(DeviceSerializer(device).data, status=status.HTTP_201_CREATED)
+
+    @extend_schema(
+        responses=DeviceSerializer(many=True),
+        summary='Мои push-устройства',
+        tags=['auth'],
+    )
+    def get(self, request):
+        devices = Device.objects.filter(user=request.user, is_active=True)
+        return Response(DeviceSerializer(devices, many=True).data)
+
+
+class DeviceUnregisterView(APIView):
+    """Отвязка push-токена (вызывается при logout)."""
+
+    @extend_schema(
+        responses={204: None},
+        summary='Удаление push-токена устройства',
+        tags=['auth'],
+    )
+    def delete(self, request, device_id: str):
+        if not DeviceService.unregister(user=request.user, device_id=device_id):
+            raise NotFoundException(_('Устройство не найдено.'))
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class CanSendNotifications(RolePermission):
@@ -65,7 +109,7 @@ class NotificationViewSet(ActionPermissionsMixin, ReadOnlyModelViewSet):
         data = serializer.validated_data
         user = User.objects.filter(id=data['user']).first()
         if user is None:
-            raise NotFoundException('Получатель не найден.')
+            raise NotFoundException(_('Получатель не найден.'))
         notification = Notification.objects.create(
             user=user,
             title=data['title'],

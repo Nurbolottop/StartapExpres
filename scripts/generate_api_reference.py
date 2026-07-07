@@ -4,6 +4,7 @@
          python manage.py spectacular --format openapi-json --file /tmp/schema.json && \
          python ../scripts/generate_api_reference.py /tmp/schema.json ../docs/API_REFERENCE.md
 """
+
 import json
 import sys
 
@@ -11,9 +12,26 @@ METHOD_ORDER = {'get': 0, 'post': 1, 'patch': 2, 'put': 3, 'delete': 4}
 
 
 def resolve(schema: dict, node: dict) -> dict:
-    while isinstance(node, dict) and '$ref' in node:
-        ref = node['$ref'].split('/')[-1]
-        node = schema['components']['schemas'].get(ref, {})
+    """Разворачивает $ref и обёртки allOf/oneOf/anyOf из одного элемента.
+
+    drf-spectacular оборачивает enum-поля (role/status/payment_type и т.д.) в
+    `allOf: [$ref: ...Enum]`, чтобы добавить title/readOnly. Без разворота
+    справочник показывал бы `object` вместо реального `enum: ...`.
+    """
+    seen = 0
+    while isinstance(node, dict) and seen < 20:
+        seen += 1
+        if '$ref' in node:
+            ref = node['$ref'].split('/')[-1]
+            node = schema['components']['schemas'].get(ref, {})
+            continue
+        for combiner in ('allOf', 'oneOf', 'anyOf'):
+            members = [m for m in node.get(combiner, []) if m.get('type') != 'null']
+            if len(members) == 1:
+                node = members[0]
+                break
+        else:
+            break
     return node
 
 

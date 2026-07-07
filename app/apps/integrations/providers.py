@@ -39,6 +39,31 @@ class LogProvider(BaseProvider):
         return f'log-{self.channel}'
 
 
+class FCMProvider(BaseProvider):
+    """Push через Firebase Cloud Messaging (HTTP v1, firebase-admin).
+
+    recipient — FCM-токен устройства. Регистрируется автоматически при
+    заданном FIREBASE_CREDENTIALS_FILE (см. configure_providers)."""
+
+    channel = 'push'
+
+    def __init__(self, credentials_file: str):
+        import firebase_admin
+        from firebase_admin import credentials
+
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(credentials.Certificate(credentials_file))
+
+    def send(self, *, recipient: str, title: str, body: str) -> str:
+        from firebase_admin import messaging
+
+        message = messaging.Message(
+            notification=messaging.Notification(title=title, body=body),
+            token=recipient,
+        )
+        return messaging.send(message)
+
+
 _REGISTRY: dict[str, BaseProvider] = {}
 
 
@@ -50,3 +75,18 @@ def get_provider(channel: str) -> BaseProvider:
     if channel not in _REGISTRY:
         _REGISTRY[channel] = LogProvider(channel)
     return _REGISTRY[channel]
+
+
+def configure_providers() -> None:
+    """Регистрация боевых провайдеров по настройкам (вызывается из AppConfig.ready).
+
+    Без ключей остаётся LogProvider — поведение dev/test не меняется."""
+    from django.conf import settings
+
+    credentials_file = getattr(settings, 'FIREBASE_CREDENTIALS_FILE', '')
+    if credentials_file:
+        try:
+            register_provider('push', FCMProvider(credentials_file))
+            logger.info('FCM push-провайдер зарегистрирован.')
+        except Exception:  # noqa: BLE001 — недоступный Firebase не должен ронять приложение
+            logger.exception('Не удалось инициализировать FCM-провайдер, используется LogProvider.')

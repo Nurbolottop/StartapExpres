@@ -1,11 +1,13 @@
 from decimal import Decimal
 
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.branches.models import Branch
 from apps.orders.choices import DeliveryType, OrderStatus, PaymentType
 from apps.orders.models import Order, OrderStatusHistory
 from apps.packages.serializers import PackageSerializer, PackageWriteSerializer
+from apps.shipments.choices import ACTIVE_STATUSES as SHIPMENT_ACTIVE_STATUSES
 from apps.tariffs.models import AdditionalService
 
 
@@ -15,12 +17,53 @@ class OrderServiceItemField(serializers.Serializer):
     price = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
 
 
+class OrderPriceDetailsSerializer(serializers.Serializer):
+    """Разбивка стоимости заказа (снимок расчёта TariffService.calculate)."""
+
+    base_price = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    weight_price = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    volume_price = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    services_price = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    insurance_price = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    total_price = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+
+
+class OrderActiveShipmentSerializer(serializers.Serializer):
+    """Активный рейс заказа — для live-трекинга машины (GET /gps/live/?shipment=...)."""
+
+    id = serializers.UUIDField(read_only=True)
+    shipment_number = serializers.CharField(read_only=True)
+    status = serializers.CharField(read_only=True)
+
+
 class OrderSerializer(serializers.ModelSerializer):
     client_phone = serializers.CharField(source='client.phone', read_only=True)
     from_branch_name = serializers.CharField(source='from_branch.name', read_only=True)
     to_branch_name = serializers.CharField(source='to_branch.name', read_only=True)
     packages = PackageSerializer(many=True, read_only=True)
     services = OrderServiceItemField(source='service_items', many=True, read_only=True)
+    price_details = serializers.SerializerMethodField()
+    active_shipment = serializers.SerializerMethodField()
+
+    @extend_schema_field(OrderPriceDetailsSerializer)
+    def get_price_details(self, order: Order) -> dict:
+        return order.price_details
+
+    @extend_schema_field(OrderActiveShipmentSerializer(allow_null=True))
+    def get_active_shipment(self, order: Order) -> dict | None:
+        shipments = [
+            item.shipment
+            for item in order.shipment_items.all()
+            if item.shipment.status in SHIPMENT_ACTIVE_STATUSES
+        ]
+        if not shipments:
+            return None
+        shipment = max(shipments, key=lambda item: item.created_at)
+        return {
+            'id': str(shipment.id),
+            'shipment_number': shipment.shipment_number,
+            'status': shipment.status,
+        }
 
     class Meta:
         model = Order
@@ -49,6 +92,7 @@ class OrderSerializer(serializers.ModelSerializer):
             'status',
             'comment',
             'version',
+            'active_shipment',
             'packages',
             'services',
             'created_at',

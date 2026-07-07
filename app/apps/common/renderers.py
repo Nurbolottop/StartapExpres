@@ -1,11 +1,13 @@
 """Единый конверт ответов API (ТЗ, раздел 25)."""
 
+from django.utils.translation import gettext_lazy as _
 from rest_framework.renderers import JSONRenderer
 
+# lazy: язык выбирается на момент рендера по Accept-Language (LocaleMiddleware)
 _STATUS_MESSAGES = {
-    200: 'Success',
-    201: 'Created successfully',
-    204: 'Deleted successfully',
+    200: _('Success'),
+    201: _('Created successfully'),
+    204: _('Deleted successfully'),
 }
 
 
@@ -25,7 +27,7 @@ class EnvelopeJSONRenderer(JSONRenderer):
         else:
             payload = {
                 'success': status_code < 400,
-                'message': _STATUS_MESSAGES.get(status_code, 'Success'),
+                'message': str(_STATUS_MESSAGES.get(status_code, _('Success'))),
                 'data': data,
             }
         return super().render(payload, accepted_media_type, renderer_context)

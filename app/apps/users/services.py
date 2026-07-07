@@ -10,6 +10,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.cache import cache
 from django.db import transaction
 from django.utils import timezone
+from django.utils.translation import gettext as _
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -20,6 +21,10 @@ from apps.common.services import generate_number
 from apps.users import exceptions
 from apps.users.choices import Roles
 from apps.users.models import ClientProfile, DeviceSession, DriverProfile, EmployeeProfile, User
+from apps.users.otp import PURPOSE_PASSWORD_RESET, PURPOSE_PHONE_VERIFY, OTPService
+
+PASSWORD_RESET_EVENT = 'auth.password_reset_code'
+PHONE_VERIFY_EVENT = 'auth.verify_code'
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +144,7 @@ class AuthService:
     @staticmethod
     def _check_brute_force(phone: str) -> None:
         if cache.get(_hard_block_key(phone)):
-            raise exceptions.UserBlockedException('Вход заблокирован. Обратитесь к администратору.')
+            raise exceptions.UserBlockedException(_('Вход заблокирован. Обратитесь к администратору.'))
         if cache.get(_attempts_key(phone), 0) >= BRUTE_FORCE_LIMIT:
             raise exceptions.TooManyAttemptsException()
 
@@ -216,9 +221,89 @@ class AuthService:
         session.save(update_fields=['is_active', 'updated_at'])
 
     @staticmethod
+    def _send_otp_sms(user: User, event_type: str, code: str) -> None:
+        """Отправляет код по SMS через шаблон в БД (Provider Interface)."""
+        from apps.notifications.choices import NotificationPriority, NotificationType
+        from apps.notifications.services import NotificationService
+
+        created = NotificationService.create(
+            user=user,
+            event_type=event_type,
+            context={'code': code},
+            priority=NotificationPriority.HIGH,
+            channels=(NotificationType.SMS,),
+        )
+        if not created:
+            logger.error('Нет SMS-шаблона «%s» — код не отправлен.', event_type)
+
+    @classmethod
+    def password_reset_request(cls, *, phone: str) -> None:
+        """SMS-код для сброса пароля. Ответ одинаков для любого номера,
+        чтобы не раскрывать, зарегистрирован ли телефон."""
+        user = User.objects.filter(phone=phone, is_active=True).first()
+        if user is None:
+            logger.info('password_reset_request: номер не зарегистрирован.')
+            return
+        code = OTPService.issue(phone=phone, purpose=PURPOSE_PASSWORD_RESET)
+        cls._send_otp_sms(user, PASSWORD_RESET_EVENT, code)
+
+    @classmethod
+    def password_reset_confirm(cls, *, phone: str, code: str, new_password: str) -> None:
+        user = User.objects.filter(phone=phone, is_active=True).first()
+        if user is None:
+            # тот же ответ, что и при неверном коде — без раскрытия номера
+            raise exceptions.OTPInvalidException()
+        OTPService.verify(phone=phone, purpose=PURPOSE_PASSWORD_RESET, code=code)
+        validate_password(new_password, user)
+        user.set_password(new_password)
+        user.save(update_fields=['password', 'updated_at'])
+        cls.logout_all(user=user)
+        events.publish(
+            'user.password_reset',
+            {
+                'actor_id': str(user.id),
+                'model': 'User',
+                'object_id': str(user.id),
+                'action': 'password_reset',
+            },
+            source='users',
+        )
+
+    @classmethod
+    def verify_request(cls, *, phone: str) -> None:
+        """SMS-код подтверждения телефона (после регистрации)."""
+        user = User.objects.filter(phone=phone, is_active=True).first()
+        if user is None or user.is_verified:
+            logger.info('verify_request: номер не найден или уже подтверждён.')
+            return
+        code = OTPService.issue(phone=phone, purpose=PURPOSE_PHONE_VERIFY)
+        cls._send_otp_sms(user, PHONE_VERIFY_EVENT, code)
+
+    @classmethod
+    def verify_confirm(cls, *, phone: str, code: str) -> User:
+        user = User.objects.filter(phone=phone, is_active=True).first()
+        if user is None:
+            raise exceptions.OTPInvalidException()
+        OTPService.verify(phone=phone, purpose=PURPOSE_PHONE_VERIFY, code=code)
+        if not user.is_verified:
+            user.is_verified = True
+            user.save(update_fields=['is_verified', 'updated_at'])
+            events.publish(
+                'user.phone_verified',
+                {
+                    'actor_id': str(user.id),
+                    'model': 'User',
+                    'object_id': str(user.id),
+                    'action': 'phone_verified',
+                },
+                source='users',
+            )
+        return user
+
+    @staticmethod
     def change_password(*, user: User, old_password: str, new_password: str) -> None:
         if not user.check_password(old_password):
-            raise exceptions.InvalidCredentialsException('Текущий пароль указан неверно.')
+            raise exceptions.InvalidCredentialsException(_('Текущий пароль указан неверно.'))
         validate_password(new_password, user)
         user.set_password(new_password)
         user.save(update_fields=['password', 'updated_at'])

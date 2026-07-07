@@ -5,8 +5,8 @@
 
 | # | Долг | Приоритет | План устранения | Срок |
 |---|---|---|---|---|
-| 1 | 2FA (SMS/Email/TOTP) для Finance/Director/SuperAdmin не реализована | Высокий | Вместе с модулем notifications и SMS Provider Interface | Этап 8 |
-| 2 | Уведомление о входе с нового устройства (SMS/Email/Push) | Средний | Подписчик на событие user.logged_in после появления каналов | Этап 8 |
+| 1 | 2FA (SMS/Email/TOTP) для Finance/Director/SuperAdmin не реализована | Высокий | Инфраструктура OTP по SMS готова (`apps.users.otp`, используется в password-reset/verify); осталось встроить шаг `otp` в логин офисных ролей | Следующая итерация |
+| 2 | Уведомление о входе с нового устройства (SMS/Email/Push) | Средний | Push-канал и устройства готовы; подписчик на `user.logged_in` | Следующая итерация |
 | 3 | mypy не включён в обязательный прогон (только black/isort/flake8) | Средний | Ввести mypy с django-stubs, поэтапно по модулям | Этап 2 |
 | 5 | Гео-поля DeviceSession (country/city) не заполняются | Низкий | GeoIP-провайдер в integrations | Этап 8 |
 | 7 | Rate-limit заголовки X-RateLimit-* не отдаются | Низкий | Middleware поверх DRF throttling | Этап 9 |

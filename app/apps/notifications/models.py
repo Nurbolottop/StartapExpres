@@ -3,11 +3,37 @@ from django.db import models
 
 from apps.common.models import BaseModel
 from apps.notifications.choices import (
+    DevicePlatform,
     NotificationPriority,
     NotificationStatus,
     NotificationType,
 )
 from apps.users.choices import Languages
+
+
+class Device(BaseModel):
+    """Push-устройство пользователя: FCM/APNs-токен, привязанный к установке
+    приложения. Одна установка (device_id) — одна запись; при входе другого
+    пользователя на том же устройстве запись перепривязывается."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name='Пользователь',
+        related_name='devices',
+        on_delete=models.CASCADE,
+    )
+    device_id = models.CharField('Идентификатор устройства', max_length=255, unique=True)
+    fcm_token = models.CharField('FCM/APNs-токен', max_length=512)
+    platform = models.CharField('Платформа', max_length=10, choices=DevicePlatform.choices)
+
+    class Meta:
+        verbose_name = 'Push-устройство'
+        verbose_name_plural = 'Push-устройства'
+        ordering = ('-created_at',)
+        indexes = [models.Index(fields=['user', 'is_active'])]
+
+    def __str__(self) -> str:
+        return f'{self.device_id} [{self.platform}] → {self.user_id}'
 
 
 class NotificationTemplate(BaseModel):

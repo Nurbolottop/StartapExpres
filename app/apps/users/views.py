@@ -17,6 +17,9 @@ from apps.users.serializers import (
     LoginSerializer,
     LogoutSerializer,
     PasswordChangeSerializer,
+    PasswordResetConfirmSerializer,
+    PhoneSerializer,
+    PhoneVerifyConfirmSerializer,
     ProfileUpdateSerializer,
     RegisterSerializer,
     TokenPairSerializer,
@@ -125,6 +128,88 @@ class PasswordChangeView(APIView):
         serializer.is_valid(raise_exception=True)
         AuthService.change_password(user=request.user, **serializer.validated_data)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class PasswordResetRequestView(APIView):
+    authentication_classes = ()
+    permission_classes = (AllowAny,)
+    throttle_classes = (ScopedRateThrottle,)
+    throttle_scope = 'auth'
+
+    @extend_schema(
+        request=PhoneSerializer,
+        responses={200: None},
+        summary='Восстановление пароля: запрос SMS-кода',
+        description='Ответ всегда успешный — существование номера не раскрывается. '
+        'Код живёт 10 минут, повторный запрос — не чаще раза в минуту (429 AUTH_008).',
+        tags=['auth'],
+    )
+    def post(self, request):
+        serializer = PhoneSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        AuthService.password_reset_request(**serializer.validated_data)
+        return Response({'sent': True})
+
+
+class PasswordResetConfirmView(APIView):
+    authentication_classes = ()
+    permission_classes = (AllowAny,)
+    throttle_classes = (ScopedRateThrottle,)
+    throttle_scope = 'auth'
+
+    @extend_schema(
+        request=PasswordResetConfirmSerializer,
+        responses={200: None},
+        summary='Восстановление пароля: установка нового по SMS-коду',
+        description='Неверный/истёкший код — 400 AUTH_007 (максимум 5 попыток). '
+        'После смены пароля все сессии и refresh-токены отзываются.',
+        tags=['auth'],
+    )
+    def post(self, request):
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        AuthService.password_reset_confirm(**serializer.validated_data)
+        return Response({'reset': True})
+
+
+class PhoneVerifyRequestView(APIView):
+    authentication_classes = ()
+    permission_classes = (AllowAny,)
+    throttle_classes = (ScopedRateThrottle,)
+    throttle_scope = 'auth'
+
+    @extend_schema(
+        request=PhoneSerializer,
+        responses={200: None},
+        summary='Верификация телефона: запрос SMS-кода',
+        description='Ответ всегда успешный. Для уже подтверждённого номера SMS не шлётся.',
+        tags=['auth'],
+    )
+    def post(self, request):
+        serializer = PhoneSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        AuthService.verify_request(**serializer.validated_data)
+        return Response({'sent': True})
+
+
+class PhoneVerifyConfirmView(APIView):
+    authentication_classes = ()
+    permission_classes = (AllowAny,)
+    throttle_classes = (ScopedRateThrottle,)
+    throttle_scope = 'auth'
+
+    @extend_schema(
+        request=PhoneVerifyConfirmSerializer,
+        responses=UserSerializer,
+        summary='Верификация телефона: подтверждение кода',
+        description='Успех — is_verified=true. Неверный/истёкший код — 400 AUTH_007.',
+        tags=['auth'],
+    )
+    def post(self, request):
+        serializer = PhoneVerifyConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = AuthService.verify_confirm(**serializer.validated_data)
+        return Response(UserSerializer(user).data)
 
 
 class SessionListView(APIView):

@@ -115,6 +115,21 @@ class PasswordChangeSerializer(serializers.Serializer):
     new_password = serializers.CharField(write_only=True, trim_whitespace=False)
 
 
+class PhoneSerializer(serializers.Serializer):
+    phone = serializers.CharField(max_length=16)
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    phone = serializers.CharField(max_length=16)
+    code = serializers.CharField(max_length=6)
+    new_password = serializers.CharField(write_only=True, trim_whitespace=False)
+
+
+class PhoneVerifyConfirmSerializer(serializers.Serializer):
+    phone = serializers.CharField(max_length=16)
+    code = serializers.CharField(max_length=6)
+
+
 class ProfileUpdateSerializer(serializers.Serializer):
     email = serializers.EmailField(required=False, allow_blank=True)
     last_name = serializers.CharField(max_length=150, required=False, allow_blank=True)

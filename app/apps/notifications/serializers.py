@@ -1,7 +1,20 @@
 from rest_framework import serializers
 
-from apps.notifications.choices import NotificationPriority
-from apps.notifications.models import Notification, NotificationTemplate
+from apps.notifications.choices import DevicePlatform, NotificationPriority
+from apps.notifications.models import Device, Notification, NotificationTemplate
+
+
+class DeviceRegisterSerializer(serializers.Serializer):
+    fcm_token = serializers.CharField(max_length=512)
+    platform = serializers.ChoiceField(choices=DevicePlatform.choices)
+    device_id = serializers.CharField(max_length=255)
+
+
+class DeviceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Device
+        fields = ('id', 'device_id', 'platform', 'is_active', 'created_at', 'updated_at')
+        read_only_fields = fields
 
 
 class NotificationSerializer(serializers.ModelSerializer):

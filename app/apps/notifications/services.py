@@ -14,9 +14,40 @@ from apps.notifications.choices import (
     NotificationStatus,
     NotificationType,
 )
-from apps.notifications.models import Notification, NotificationTemplate
+from apps.notifications.models import Device, Notification, NotificationTemplate
 
 logger = logging.getLogger('notifications')
+
+
+class DeviceService:
+    """Регистрация push-устройств (FCM/APNs) — ТЗ, раздел 12."""
+
+    @staticmethod
+    def register(*, user, device_id: str, fcm_token: str, platform: str) -> Device:
+        device, _created = Device.all_objects.update_or_create(
+            device_id=device_id,
+            defaults={
+                'user': user,
+                'fcm_token': fcm_token,
+                'platform': platform,
+                'is_active': True,
+                'is_deleted': False,
+                'deleted_at': None,
+                'updated_by': user,
+            },
+        )
+        return device
+
+    @staticmethod
+    def unregister(*, user, device_id: str) -> bool:
+        device = Device.objects.filter(user=user, device_id=device_id).first()
+        if device is None:
+            return False
+        device.is_active = False
+        device.updated_by = user
+        device.save(update_fields=['is_active', 'updated_by', 'updated_at'])
+        device.delete()
+        return True
 
 
 def render_template(template: str, context: dict) -> str:
@@ -83,6 +114,25 @@ class NotificationService:
 
         if notification.type == NotificationType.IN_APP:
             notification.status = NotificationStatus.DELIVERED
+            notification.sent_at = timezone.now()
+            notification.save(update_fields=['status', 'sent_at', 'updated_at'])
+            return
+
+        if notification.type == NotificationType.PUSH:
+            tokens = list(
+                Device.objects.filter(user=notification.user, is_active=True).values_list(
+                    'fcm_token', flat=True
+                )
+            )
+            if not tokens:
+                notification.status = NotificationStatus.CANCELLED
+                notification.last_error = 'Нет зарегистрированных push-устройств.'
+                notification.save(update_fields=['status', 'last_error', 'updated_at'])
+                return
+            provider = get_provider(NotificationType.PUSH)
+            for token in tokens:
+                provider.send(recipient=token, title=notification.title, body=notification.body)
+            notification.status = NotificationStatus.SENT
             notification.sent_at = timezone.now()
             notification.save(update_fields=['status', 'sent_at', 'updated_at'])
             return

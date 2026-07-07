@@ -1,0 +1,136 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-07 10:51+0600\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=4; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
+"n%10<=4 && (n%100<12 || n%100>14) ? 1 : n%10==0 || (n%10>=5 && n%10<=9) || "
+"(n%100>=11 && n%100<=14)? 2 : 3);\n"
+#: apps/common/exceptions.py:104
+msgid "Объект используется другими записями и не может быть удалён."
+msgstr ""
+
+#: apps/common/exceptions.py:119
+msgid "Ошибка валидации данных."
+msgstr ""
+
+#: apps/common/exceptions.py:136
+msgid "Ошибка запроса."
+msgstr ""
+
+#: apps/common/renderers.py:8 apps/common/renderers.py:30
+msgid "Success"
+msgstr "Успешно"
+
+#: apps/common/renderers.py:9
+msgid "Created successfully"
+msgstr "Успешно создано"
+
+#: apps/common/renderers.py:10
+msgid "Deleted successfully"
+msgstr "Успешно удалено"
+
+#: apps/notifications/views.py:60
+msgid "Устройство не найдено."
+msgstr ""
+
+#: apps/notifications/views.py:112
+msgid "Получатель не найден."
+msgstr ""
+
+#: apps/orders/exceptions.py:9
+msgid "Недопустимый переход статуса заказа."
+msgstr ""
+
+#: apps/orders/exceptions.py:14
+msgid "Роль не позволяет выполнить этот переход статуса."
+msgstr ""
+
+#: apps/orders/exceptions.py:19
+msgid "Заказ отправлен и больше не может быть изменён."
+msgstr ""
+
+#: apps/orders/exceptions.py:24
+msgid "После подтверждения нельзя менять стороны, филиалы и стоимость."
+msgstr ""
+
+#: apps/orders/exceptions.py:29
+msgid "Заказ был изменён другим пользователем. Обновите данные."
+msgstr ""
+
+#: apps/orders/exceptions.py:34
+msgid "Заказ уже оплачен."
+msgstr ""
+
+#: apps/orders/exceptions.py:39
+msgid "Заказ должен содержать хотя бы одно грузовое место."
+msgstr ""
+
+#: apps/orders/exceptions.py:44
+msgid "Клиент может отменить заказ только до подтверждения."
+msgstr ""
+
+#: apps/users/exceptions.py:15
+msgid "Неверный или истёкший код подтверждения."
+msgstr ""
+
+#: apps/users/exceptions.py:20
+msgid "Код уже отправлен. Повторный запрос — через минуту."
+msgstr ""
+
+#: apps/users/exceptions.py:25
+msgid "Неверный телефон или пароль."
+msgstr ""
+
+#: apps/users/exceptions.py:31
+msgid "Пользователь заблокирован."
+msgstr ""
+
+#: apps/users/exceptions.py:36
+msgid "Слишком много попыток входа. Повторите через 30 минут."
+msgstr ""
+
+#: apps/users/exceptions.py:41
+msgid "Недействительный refresh-токен."
+msgstr ""
+
+#: apps/users/exceptions.py:47
+msgid "Сессия не найдена."
+msgstr ""
+
+#: apps/users/exceptions.py:52
+msgid "Нельзя удалить или заблокировать последнего суперадминистратора."
+msgstr ""
+
+#: apps/users/exceptions.py:57
+msgid "Нельзя заблокировать или удалить самого себя."
+msgstr ""
+
+#: apps/users/exceptions.py:62
+msgid "Назначение этой роли недоступно."
+msgstr ""
+
+#: apps/users/otp.py:60
+msgid "Превышено число попыток. Запросите новый код."
+msgstr ""
+
+#: apps/users/services.py:147
+msgid "Вход заблокирован. Обратитесь к администратору."
+msgstr ""
+
+#: apps/users/services.py:306
+msgid "Текущий пароль указан неверно."
+msgstr ""

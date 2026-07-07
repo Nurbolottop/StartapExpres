@@ -11,6 +11,8 @@ class AuthErrors:
     INVALID_REFRESH_TOKEN = 'AUTH_004'
     USER_BLOCKED = 'AUTH_005'
     TOO_MANY_ATTEMPTS = 'AUTH_006'
+    OTP_INVALID = 'AUTH_007'
+    OTP_COOLDOWN = 'AUTH_008'
 
 
 class UserErrors:
