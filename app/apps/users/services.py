@@ -300,6 +300,77 @@ class AuthService:
             )
         return user
 
+    @classmethod
+    @transaction.atomic
+    def delete_self(cls, *, user: User) -> None:
+        """Самоудаление аккаунта клиентом (требования App Store/Google Play).
+
+        Физическое удаление невозможно (заказы через PROTECT), поэтому:
+        деактивация + soft-delete, обезличивание ПДн, отзыв всех токенов.
+        Телефон/email заменяются на плейсхолдеры, чтобы освободить их
+        для повторной регистрации.
+        """
+        cls._ensure_can_self_delete(user)
+
+        anon = f'deleted_{user.id.hex[:8]}'
+        user.phone = anon[:16]
+        user.email = None
+        user.username = None
+        user.first_name = ''
+        user.last_name = ''
+        user.middle_name = ''
+        if user.avatar:
+            user.avatar.delete(save=False)
+        user.avatar = None
+        user.is_active = False
+        user.save(
+            update_fields=[
+                'phone',
+                'email',
+                'username',
+                'first_name',
+                'last_name',
+                'middle_name',
+                'avatar',
+                'is_active',
+                'updated_at',
+            ]
+        )
+        cls._anonymize_profile(user)
+        cls.logout_all(user=user)
+        user.delete()  # soft delete (is_deleted=True)
+        events.publish(
+            'user.self_deleted',
+            {
+                'actor_id': str(user.id),
+                'model': 'User',
+                'object_id': str(user.id),
+                'action': 'self_delete',
+            },
+            source='users',
+        )
+
+    @staticmethod
+    def _ensure_can_self_delete(user: User) -> None:
+        """Последний суперадмин не может удалить сам себя (иначе система без админа)."""
+        if user.role != Roles.SUPERADMIN:
+            return
+        has_other = User.objects.filter(role=Roles.SUPERADMIN, is_active=True).exclude(id=user.id).exists()
+        if not has_other:
+            raise exceptions.LastSuperAdminException()
+
+    @staticmethod
+    def _anonymize_profile(user: User) -> None:
+        """Обезличивает ПДн в профиле клиента (паспорт, адрес, компания)."""
+        profile = getattr(user, 'client_profile', None)
+        if profile is None:
+            return
+        profile.passport_number = ''
+        profile.address = ''
+        profile.company_name = ''
+        profile.notes = ''
+        profile.save(update_fields=['passport_number', 'address', 'company_name', 'notes', 'updated_at'])
+
     @staticmethod
     def change_password(*, user: User, old_password: str, new_password: str) -> None:
         if not user.check_password(old_password):

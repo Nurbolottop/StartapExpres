@@ -118,6 +118,17 @@ class MeView(APIView):
         user = UserService.update_self(user=request.user, data=serializer.validated_data)
         return Response(UserSerializer(user).data)
 
+    @extend_schema(
+        responses={204: None},
+        summary='Удаление своего аккаунта',
+        description='Самоудаление (App Store/Google Play). Аккаунт деактивируется, '
+        'ПДн обезличиваются, все токены и сессии отзываются. Необратимо.',
+        tags=['auth'],
+    )
+    def delete(self, request):
+        AuthService.delete_self(user=request.user)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 class PasswordChangeView(APIView):
     @extend_schema(

@@ -6,6 +6,8 @@ from django.urls import reverse
 
 from apps.notifications.choices import NotificationType
 from apps.notifications.models import Device, NotificationTemplate
+from apps.users.choices import Roles
+from apps.users.models import User
 from apps.users.otp import (
     PURPOSE_PASSWORD_RESET,
     PURPOSE_PHONE_VERIFY,
@@ -133,6 +135,40 @@ class TestDeviceRegistration:
         url = reverse('auth-device-unregister', kwargs={'device_id': 'dev-3'})
         response = api_client.delete(url)
         assert response.status_code == 404
+
+
+class TestSelfDelete:
+    def test_delete_own_account_soft_deletes_and_anonymizes(self, api_client):
+        user = UserFactory(phone='+996700888111', role=Roles.CLIENT, email='c@ex.com')
+        api_client.force_authenticate(user)
+
+        response = api_client.delete(reverse('auth-me'))
+        assert response.status_code == 204
+
+        deleted = User.all_objects.get(id=user.id)
+        assert deleted.is_active is False
+        assert deleted.is_deleted is True
+        assert deleted.phone != '+996700888111'
+        assert deleted.email is None
+        assert deleted.first_name == ''
+
+    def test_phone_freed_for_reregistration(self, api_client):
+        user = UserFactory(phone='+996700888222', role=Roles.CLIENT)
+        api_client.force_authenticate(user)
+        api_client.delete(reverse('auth-me'))
+
+        api_client.force_authenticate(user=None)
+        response = api_client.post(
+            reverse('auth-register'),
+            {'phone': '+996700888222', 'password': DEFAULT_PASSWORD},
+        )
+        assert response.status_code == 201
+
+    def test_last_superadmin_cannot_self_delete(self, api_client):
+        admin = UserFactory(role=Roles.SUPERADMIN)
+        api_client.force_authenticate(admin)
+        response = api_client.delete(reverse('auth-me'))
+        assert response.status_code == 409
 
 
 class TestLocalization:
