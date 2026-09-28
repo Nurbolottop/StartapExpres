@@ -97,9 +97,10 @@ class AuthService:
     def register(cls, *, phone: str, password: str, first_name: str = '', last_name: str = '') -> dict:
         """Публичная регистрация клиента (ТЗ, раздел 03)."""
         user = User(phone=phone, first_name=first_name, last_name=last_name, role=Roles.CLIENT)
+        # Валидация до хэширования: занятый номер не должен ждать Argon2
+        user.full_clean(exclude=['password'])
         validate_password(password, user)
         user.set_password(password)
-        user.full_clean(exclude=['password'])
         user.save()
         UserService.create_profile(user)
 

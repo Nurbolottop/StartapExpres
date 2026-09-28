@@ -130,7 +130,7 @@ AUTH_USER_MODEL = 'users.User'
 
 # Argon2 — основной хэшер, PBKDF2 — fallback (ТЗ, раздел 30)
 PASSWORD_HASHERS = [
-    'django.contrib.auth.hashers.Argon2PasswordHasher',
+    'apps.common.hashers.LightArgon2PasswordHasher',
     'django.contrib.auth.hashers.PBKDF2PasswordHasher',
 ]
 
