@@ -47,6 +47,9 @@ class ShipmentErrors:
     VOLUME_LIMIT = 'SHIPMENT_007'
     MISSING_PACKAGE = 'SHIPMENT_008'
     INVALID_ROUTE = 'SHIPMENT_009'
+    NOT_IN_TRANSIT = 'SHIPMENT_010'  # рейс ещё не в пути
+    POINT_NOT_IN_ROUTE = 'SHIPMENT_011'  # точка не из маршрута рейса
+    ROUTE_REQUIRED = 'SHIPMENT_012'  # у рейса не задан маршрут
 
 
 class PackageErrors:

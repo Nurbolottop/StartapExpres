@@ -60,6 +60,10 @@ STARTED_STATUSES = frozenset(
     }
 )
 
+# Статусы, в которых принимается отметка точки маршрута. ARRIVED/UNLOADING/
+# COMPLETED тоже: отметку ставят в дороге без сети и досылают позже.
+CHECKPOINT_STATUSES = STARTED_STATUSES | {ShipmentStatus.COMPLETED}
+
 SHIPMENT_TRANSITIONS: dict[str, frozenset[str]] = {
     ShipmentStatus.DRAFT: frozenset({ShipmentStatus.PLANNED, ShipmentStatus.CANCELLED}),
     ShipmentStatus.PLANNED: frozenset({ShipmentStatus.READY, ShipmentStatus.CANCELLED}),

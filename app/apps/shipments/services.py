@@ -6,6 +6,7 @@
 """
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.common import events
@@ -16,16 +17,24 @@ from apps.orders.transitions import OrderTransitionService
 from apps.packages.choices import PackageStatus
 from apps.packages.models import Package
 from apps.packages.transitions import PackageTransitionService
+from apps.routes.models import RoutePoint
 from apps.shipments import exceptions
 from apps.shipments.choices import (
     ACTIVE_STATUSES,
+    CHECKPOINT_STATUSES,
     OPEN_STATUSES,
     SHIPMENT_TRANSITION_ROLES,
     SHIPMENT_TRANSITIONS,
     STARTED_STATUSES,
     ShipmentStatus,
 )
-from apps.shipments.models import Incident, Shipment, ShipmentItem, ShipmentStatusHistory
+from apps.shipments.models import (
+    Incident,
+    Shipment,
+    ShipmentCheckpoint,
+    ShipmentItem,
+    ShipmentStatusHistory,
+)
 from apps.tracking.services import TrackingService
 from apps.users.choices import DriverStatus, Roles
 from apps.vehicles.choices import VehicleStatus
@@ -448,3 +457,103 @@ class ShipmentService:
             source='shipments',
         )
         return incident
+
+
+CHECKPOINT_TRACKING_STATUS = 'checkpoint_reached'
+
+
+class ShipmentCheckpointService:
+    """Ручные отметки водителя по точкам маршрута (трекинг, вариант 1)."""
+
+    @staticmethod
+    def _validate_actor(shipment: Shipment, actor) -> None:
+        if actor.role == Roles.DRIVER and shipment.driver_id != actor.id:
+            raise exceptions.ShipmentTransitionRoleException(
+                'Водитель может отмечать точки только своего рейса.'
+            )
+
+    @classmethod
+    @transaction.atomic
+    def mark(
+        cls,
+        *,
+        actor,
+        shipment: Shipment,
+        client_id,
+        route_point_id,
+        reached_at,
+        comment: str = '',
+        latitude=None,
+        longitude=None,
+    ) -> tuple[ShipmentCheckpoint, bool]:
+        """Отмечает точку маршрута. Возвращает (отметка, создана ли).
+
+        Идемпотентна: повтор с тем же client_id или повторная отметка той же
+        точки возвращают существующую запись — приложение досылает
+        офлайн-очередь и любой 4xx считает окончательным отказом.
+        Статусы рейса и заказов не меняет.
+        """
+        locked = Shipment.objects.select_for_update().get(id=shipment.id)
+        cls._validate_actor(locked, actor)
+
+        existing = (
+            ShipmentCheckpoint.objects.select_related('route_point__city')
+            .filter(Q(client_id=client_id) | Q(shipment=locked, route_point_id=route_point_id))
+            .first()
+        )
+        if existing is not None:
+            return existing, False
+
+        if locked.status not in CHECKPOINT_STATUSES:
+            raise exceptions.ShipmentNotInTransitException(details={'status': locked.status})
+        if locked.route_id is None:
+            raise exceptions.ShipmentRouteRequiredException()
+        point = (
+            RoutePoint.objects.select_related('city')
+            .filter(id=route_point_id, route_id=locked.route_id)
+            .first()
+        )
+        if point is None:
+            raise exceptions.RoutePointNotInRouteException()
+
+        checkpoint = ShipmentCheckpoint.objects.create(
+            shipment=locked,
+            route_point=point,
+            client_id=client_id,
+            reached_at=reached_at,
+            comment=comment or '',
+            latitude=latitude if latitude is not None else point.latitude,
+            longitude=longitude if longitude is not None else point.longitude,
+            created_by=actor,
+        )
+
+        # Событие трекинга на каждый заказ рейса: город — в comment
+        city_name = point.city.name
+        order_ids = list(locked.items.values_list('order_id', flat=True).distinct())
+        for order in Order.objects.filter(id__in=order_ids):
+            TrackingService.record(
+                order=order,
+                status=CHECKPOINT_TRACKING_STATUS,
+                employee=actor,
+                comment=city_name,
+                latitude=checkpoint.latitude,
+                longitude=checkpoint.longitude,
+            )
+
+        events.publish(
+            'shipment.checkpoint_reached',
+            {
+                'actor_id': str(actor.id),
+                'model': 'ShipmentCheckpoint',
+                'object_id': str(checkpoint.id),
+                'action': 'mark_checkpoint',
+                'new': {'shipment': locked.shipment_number, 'city': city_name},
+                'shipment_id': str(locked.id),
+                'shipment_number': locked.shipment_number,
+                'city_name': city_name,
+                'sequence': point.sequence,
+                'order_ids': [str(order_id) for order_id in order_ids],
+            },
+            source='shipments',
+        )
+        return checkpoint, True

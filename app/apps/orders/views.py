@@ -50,6 +50,7 @@ class OrderViewSet(ActionPermissionsMixin, ModelViewSet):
         'receiver_name',
         'receiver_phone',
         'client__phone',
+        'client__client_profile__client_code',
     )
     ordering_fields = ('created_at', 'total_price', 'status')
 

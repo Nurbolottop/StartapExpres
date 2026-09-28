@@ -303,3 +303,22 @@ class TestOrderRules:
             'waiting_payment',
         ]
         assert len(tracking['data']) == 3
+
+
+@pytest.mark.django_db
+def test_search_orders_by_client_code(auth_client, warehouse_user):
+    from django.urls import reverse
+
+    from apps.orders.tests.factories import OrderFactory
+    from apps.users.choices import Roles
+    from apps.users.models import ClientProfile
+    from apps.users.tests.factories import UserFactory
+
+    client = UserFactory(role=Roles.CLIENT)
+    ClientProfile.objects.update_or_create(user=client, defaults={'client_code': 'CLT-777001'})
+    mine = OrderFactory(client=client)
+    OrderFactory()
+
+    response = auth_client(warehouse_user).get(reverse('orders-list'), {'search': 'CLT-777001'})
+
+    assert [item['id'] for item in response.json()['data']] == [str(mine.id)]

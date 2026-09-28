@@ -1,7 +1,19 @@
+from datetime import timedelta
+
+from django.utils import timezone
 from rest_framework import serializers
 
 from apps.shipments.choices import IncidentType
-from apps.shipments.models import Incident, Shipment, ShipmentItem, ShipmentStatusHistory
+from apps.shipments.models import (
+    Incident,
+    Shipment,
+    ShipmentCheckpoint,
+    ShipmentItem,
+    ShipmentStatusHistory,
+)
+
+# Допуск на расхождение часов устройства водителя
+CHECKPOINT_CLOCK_SKEW = timedelta(minutes=5)
 
 
 class ShipmentItemSerializer(serializers.ModelSerializer):
@@ -134,3 +146,44 @@ class ShipmentStatusHistorySerializer(serializers.ModelSerializer):
         model = ShipmentStatusHistory
         fields = ('id', 'from_status', 'to_status', 'changed_by', 'comment', 'created_at')
         read_only_fields = fields
+
+
+class ShipmentCheckpointSerializer(serializers.ModelSerializer):
+    city_name = serializers.CharField(source='route_point.city.name', read_only=True)
+    sequence = serializers.IntegerField(source='route_point.sequence', read_only=True)
+
+    class Meta:
+        model = ShipmentCheckpoint
+        fields = (
+            'id',
+            'client_id',
+            'shipment',
+            'route_point',
+            'city_name',
+            'sequence',
+            'reached_at',
+            'latitude',
+            'longitude',
+            'comment',
+            'created_by',
+            'created_at',
+        )
+        read_only_fields = fields
+
+
+class ShipmentCheckpointCreateSerializer(serializers.Serializer):
+    client_id = serializers.UUIDField()
+    route_point = serializers.UUIDField()
+    reached_at = serializers.DateTimeField()
+    comment = serializers.CharField(max_length=200, required=False, allow_blank=True, default='')
+    latitude = serializers.DecimalField(
+        max_digits=9, decimal_places=6, required=False, allow_null=True, default=None
+    )
+    longitude = serializers.DecimalField(
+        max_digits=9, decimal_places=6, required=False, allow_null=True, default=None
+    )
+
+    def validate_reached_at(self, value):
+        if value > timezone.now() + CHECKPOINT_CLOCK_SKEW:
+            raise serializers.ValidationError('Время отметки не может быть в будущем.')
+        return value

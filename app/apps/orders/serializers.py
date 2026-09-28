@@ -28,12 +28,22 @@ class OrderPriceDetailsSerializer(serializers.Serializer):
     total_price = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
 
 
+class OrderLastCheckpointSerializer(serializers.Serializer):
+    """Последняя отмеченная водителем точка маршрута: «Машина проехала Токтогул в 14:05»."""
+
+    city_name = serializers.CharField(read_only=True)
+    reached_at = serializers.DateTimeField(read_only=True)
+    sequence = serializers.IntegerField(read_only=True)
+    total_points = serializers.IntegerField(read_only=True)
+
+
 class OrderActiveShipmentSerializer(serializers.Serializer):
     """Активный рейс заказа — для live-трекинга машины (GET /gps/live/?shipment=...)."""
 
     id = serializers.UUIDField(read_only=True)
     shipment_number = serializers.CharField(read_only=True)
     status = serializers.CharField(read_only=True)
+    last_checkpoint = OrderLastCheckpointSerializer(read_only=True, allow_null=True)
 
 
 class OrderSerializer(serializers.ModelSerializer):
@@ -63,6 +73,21 @@ class OrderSerializer(serializers.ModelSerializer):
             'id': str(shipment.id),
             'shipment_number': shipment.shipment_number,
             'status': shipment.status,
+            'last_checkpoint': self._last_checkpoint(shipment),
+        }
+
+    @staticmethod
+    def _last_checkpoint(shipment) -> dict | None:
+        # .all() — чтобы работал prefetch из OrderSelector (без запроса на заказ)
+        checkpoints = list(shipment.checkpoints.all())
+        if not checkpoints:
+            return None
+        checkpoint = max(checkpoints, key=lambda item: item.reached_at)
+        return {
+            'city_name': checkpoint.route_point.city.name,
+            'reached_at': checkpoint.reached_at.isoformat(),
+            'sequence': checkpoint.route_point.sequence,
+            'total_points': len(shipment.route.points.all()) if shipment.route_id else 0,
         }
 
     class Meta:

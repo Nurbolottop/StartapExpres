@@ -170,3 +170,47 @@ class Incident(BaseModel):
 
     def __str__(self) -> str:
         return f'{self.get_type_display()} ({self.shipment.shipment_number})'
+
+
+class ShipmentCheckpoint(BaseModel):
+    """Отметка водителя «доехал до точки маршрута» (ручной трекинг).
+
+    Append-only. Дубли невозможны по двум ключам: client_id (UUID с
+    устройства) и паре (рейс, точка маршрута).
+    """
+
+    shipment = models.ForeignKey(
+        Shipment, verbose_name='Рейс', related_name='checkpoints', on_delete=models.CASCADE
+    )
+    route_point = models.ForeignKey(
+        'routes.RoutePoint',
+        verbose_name='Точка маршрута',
+        related_name='checkpoints',
+        on_delete=models.PROTECT,
+    )
+    client_id = models.UUIDField(
+        'ID операции с устройства',
+        unique=True,
+        help_text='UUID, сгенерированный приложением: защита от дублей при ретраях.',
+    )
+    reached_at = models.DateTimeField(
+        'Время отметки',
+        help_text='Время на устройстве в момент нажатия; может быть в прошлом (офлайн).',
+    )
+    latitude = models.DecimalField('Широта', max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField('Долгота', max_digits=9, decimal_places=6, null=True, blank=True)
+    comment = models.CharField('Комментарий водителя', max_length=200, blank=True)
+
+    class Meta:
+        verbose_name = 'Отметка точки маршрута'
+        verbose_name_plural = 'Отметки точек маршрута'
+        ordering = ('reached_at',)
+        constraints = [
+            models.UniqueConstraint(
+                fields=['shipment', 'route_point'], name='unique_checkpoint_per_route_point'
+            ),
+        ]
+        indexes = [models.Index(fields=['shipment', 'reached_at'])]
+
+    def __str__(self) -> str:
+        return f'{self.shipment.shipment_number}: {self.route_point}'

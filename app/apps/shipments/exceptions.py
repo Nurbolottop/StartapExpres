@@ -55,3 +55,18 @@ class ShipmentLockedException(ConflictException):
 class ShipmentChecklistException(BusinessException):
     default_code = errors.ShipmentErrors.INVALID_ROUTE
     default_message = 'Не выполнены условия отправки рейса.'
+
+
+class ShipmentNotInTransitException(BusinessException):
+    default_code = errors.ShipmentErrors.NOT_IN_TRANSIT
+    default_message = 'Рейс ещё не в пути — отметки точек недоступны.'
+
+
+class RoutePointNotInRouteException(BusinessException):
+    default_code = errors.ShipmentErrors.POINT_NOT_IN_ROUTE
+    default_message = 'Точка не принадлежит маршруту рейса.'
+
+
+class ShipmentRouteRequiredException(BusinessException):
+    default_code = errors.ShipmentErrors.ROUTE_REQUIRED
+    default_message = 'У рейса не задан маршрут.'

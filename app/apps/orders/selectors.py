@@ -10,7 +10,10 @@ class OrderSelector:
     @staticmethod
     def base() -> QuerySet[Order]:
         return Order.objects.select_related('client', 'from_branch', 'to_branch', 'tariff').prefetch_related(
-            'packages', 'service_items__service', 'shipment_items__shipment'
+            'packages',
+            'service_items__service',
+            'shipment_items__shipment__route__points',
+            'shipment_items__shipment__checkpoints__route_point__city',
         )
 
     @classmethod

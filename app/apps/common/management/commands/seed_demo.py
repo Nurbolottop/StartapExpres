@@ -1,9 +1,12 @@
 """Наполнение стенда демо-данными для проверки мобильного приложения.
 
 Идемпотентна: повторный запуск не создаёт дублей (get_or_create по кодам).
-Создаёт справочники (города, филиалы, тарифы, доп.услуги, склады с зонами и
-ячейками, парк ТС), тестовые учётки всех ролей и демо-заказ с QR + рейс,
-назначенный тестовому водителю.
+Создаёт справочники (города, филиалы, маршруты с точками, тарифы, доп.услуги,
+склады с зонами и ячейками, парк ТС), тестовые учётки всех ролей и сценарии:
+заказы во всех ключевых статусах и четыре рейса (ready, in_transit с
+отметками точек, arrived, completed). Всё доводится реальными операциями
+сервисов, поэтому данные непротиворечивы. В конце печатает учётки, QR-коды
+грузов и рейсы.
 
 Запуск:
     cd app && DJANGO_SETTINGS_MODULE=core.settings.dev python manage.py seed_demo
@@ -12,11 +15,13 @@
 Пароль всех тестовых учёток — Passw0rd!Demo (12+ символов, сложность ок).
 """
 
-from datetime import time
+import uuid
+from datetime import time, timedelta
 from decimal import Decimal
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
+from django.utils import timezone
 
 from apps.branches.models import Branch, City
 from apps.orders.choices import DeliveryType, OrderStatus, PaymentType
@@ -25,17 +30,25 @@ from apps.orders.transitions import OrderTransitionService
 from apps.packages.choices import PackageStatus
 from apps.packages.services import PackageService
 from apps.packages.transitions import PackageTransitionService
+from apps.orders.models import Order
+from apps.packages.models import Package
+from apps.routes.models import Route, RoutePoint
 from apps.shipments.choices import ShipmentStatus
 from apps.shipments.models import Shipment
-from apps.shipments.services import ShipmentService, ShipmentTransitionService
+from apps.shipments.services import (
+    ShipmentCheckpointService,
+    ShipmentService,
+    ShipmentTransitionService,
+)
 from apps.tariffs.models import AdditionalService, Tariff
 from apps.users.choices import Roles
-from apps.users.models import DriverProfile, User
+from apps.users.models import DriverProfile, EmployeeProfile, User
 from apps.users.services import UserService
 from apps.vehicles.choices import VehicleStatus
 from apps.vehicles.models import Vehicle, VehicleType
 from apps.warehouses.choices import ZoneType
 from apps.warehouses.models import Warehouse, WarehouseCell, WarehouseZone
+from apps.warehouses.operations import WarehouseOperationsService
 
 DEMO_PASSWORD = 'Passw0rd!Demo'
 
@@ -44,18 +57,60 @@ DEMO_USERS = [
     (Roles.SUPERADMIN, '+996700900001', 'Демо', 'Суперадмин'),
     (Roles.DIRECTOR, '+996700900002', 'Демо', 'Директор'),
     (Roles.OPERATOR, '+996700900003', 'Демо', 'Оператор'),
-    (Roles.WAREHOUSE, '+996700900004', 'Демо', 'Складовщик'),
-    (Roles.DRIVER, '+996700900005', 'Демо', 'Водитель'),
+    (Roles.WAREHOUSE, '+996700900004', 'Нургуль', 'Асанова'),  # склад Бишкека
+    (Roles.WAREHOUSE, '+996700900009', 'Айзада', 'Мамбетова'),  # склад Оша
+    (Roles.DRIVER, '+996700900005', 'Марат', 'Кадыров'),
+    (Roles.DRIVER, '+996700900007', 'Талант', 'Осмонов'),
+    (Roles.DRIVER, '+996700900008', 'Эрмек', 'Турдубаев'),
     (Roles.FINANCE, '+996700900006', 'Демо', 'Финансист'),
-    (Roles.CLIENT, '+996700900777', 'Демо', 'Клиент'),
+    (Roles.CLIENT, '+996700900777', 'Айбек', 'Жумаев'),
+    (Roles.CLIENT, '+996700900778', 'Гүлназ', 'Ибраева'),
 ]
 
 CITIES = [
     ('Бишкек', 'BIS', Decimal('42.874621'), Decimal('74.569762')),
-    ('Ош', 'OSH', Decimal('40.514202'), Decimal('72.812204')),
+    ('Кара-Балта', 'KBL', Decimal('42.816700'), Decimal('73.850000')),
+    ('Токтогул', 'TKT', Decimal('41.874700'), Decimal('72.938600')),
     ('Джалал-Абад', 'JAL', Decimal('40.933393'), Decimal('72.999672')),
+    ('Ош', 'OSH', Decimal('40.514202'), Decimal('72.812204')),
     ('Каракол', 'KAR', Decimal('42.490527'), Decimal('78.393604')),
 ]
+
+# Филиалы только в городах назначения; Кара-Балта и Токтогул — транзитные точки
+BRANCH_CITIES = ('BIS', 'OSH', 'JAL', 'KAR')
+
+# Филиал кладовщика: по нему приложение показывает рейсы склада
+WAREHOUSE_BRANCHES = {'+996700900004': 'BIS', '+996700900009': 'OSH'}
+
+# Точки маршрута Бишкек — Ош по порядку
+ROUTE_BIS_OSH = ['BIS', 'KBL', 'TKT', 'JAL', 'OSH']
+
+# По машине на каждый одновременно активный рейс (иначе VehicleBusyException)
+VEHICLE_PLATES = ['01KG777AAA', '01KG777BBB', '01KG777CCC']
+DRIVER_PHONES = ['+996700900005', '+996700900007', '+996700900008']
+
+# Маркер демо-сценариев: по нему повторный запуск понимает, что всё уже создано
+SCENARIO_MARK = 'Демо-сценарий'
+
+# Заказ клиента доводится до оплаты этой цепочкой (актор — суперадмин)
+PAID_CHAIN = (
+    OrderStatus.WAITING_CONFIRMATION,
+    OrderStatus.CONFIRMED,
+    OrderStatus.WAITING_PAYMENT,
+    OrderStatus.PAID,
+)
+
+
+def _box(title: str, weight: str, **extra) -> dict:
+    return {
+        'title': title,
+        'weight': Decimal(weight),
+        'length': 40,
+        'width': 30,
+        'height': 30,
+        'declared_price': Decimal('5000'),
+        **extra,
+    }
 
 
 class Command(BaseCommand):
@@ -76,11 +131,14 @@ class Command(BaseCommand):
             actor = self._seed_users()
             cities = self._seed_cities(actor)
             branches = self._seed_branches(actor, cities)
+            self._seed_employee_branches(branches)
+            routes = self._seed_routes(actor, cities, branches)
             self._seed_tariffs(actor, cities)
             services = self._seed_services(actor)
             self._seed_warehouses(actor, branches)
             self._seed_fleet(actor, branches)
-            self._seed_demo_order(actor, branches, services)
+            self._seed_scenarios(actor, branches, services, routes)
+        self._print_summary()
         self.stdout.write(self.style.SUCCESS('Демо-данные готовы. Пароль учёток: ' + DEMO_PASSWORD))
 
     # ------------------------------------------------------------------ users
@@ -126,7 +184,8 @@ class Command(BaseCommand):
 
     def _seed_branches(self, actor, cities) -> dict[str, Branch]:
         branches = {}
-        for code, city in cities.items():
+        for code in BRANCH_CITIES:
+            city = cities[code]
             branch, _ = Branch.objects.get_or_create(
                 code=f'{code}01',
                 defaults={
@@ -143,6 +202,49 @@ class Command(BaseCommand):
             branches[code] = branch
         self.stdout.write(f'  branches: {len(branches)}')
         return branches
+
+    def _seed_employee_branches(self, branches) -> None:
+        """Кладовщику нужен филиал: по нему приложение показывает рейсы склада."""
+        for phone, city_code in WAREHOUSE_BRANCHES.items():
+            profile = EmployeeProfile.objects.filter(user__phone=phone).first()
+            if profile is not None and profile.branch_id is None:
+                profile.branch = branches[city_code]
+                profile.save(update_fields=['branch', 'updated_at'])
+                self.stdout.write(f'  warehouse {phone} → филиал {branches[city_code].name}')
+
+    def _seed_routes(self, actor, cities, branches) -> dict[str, Route]:
+        """Маршруты с точками: по ним водитель отмечает пройденные города."""
+        routes = {}
+        for code, name, city_codes in (
+            ('BIS-OSH', 'Бишкек — Ош', ROUTE_BIS_OSH),
+            ('OSH-BIS', 'Ош — Бишкек', list(reversed(ROUTE_BIS_OSH))),
+        ):
+            route, _ = Route.objects.get_or_create(
+                code=code,
+                defaults={
+                    'name': name,
+                    'start_branch': branches[city_codes[0]],
+                    'end_branch': branches[city_codes[-1]],
+                    'estimated_distance': Decimal('672.0'),
+                    'estimated_duration': 720,
+                    'created_by': actor,
+                },
+            )
+            for sequence, city_code in enumerate(city_codes, start=1):
+                city = cities[city_code]
+                RoutePoint.objects.get_or_create(
+                    route=route,
+                    sequence=sequence,
+                    defaults={
+                        'city': city,
+                        'latitude': city.latitude,
+                        'longitude': city.longitude,
+                        'created_by': actor,
+                    },
+                )
+            routes[code] = route
+        self.stdout.write(f'  routes: {len(routes)} (по {len(ROUTE_BIS_OSH)} точек)')
+        return routes
 
     def _seed_tariffs(self, actor, cities) -> None:
         # тариф по умолчанию (любое направление)
@@ -242,108 +344,232 @@ class Command(BaseCommand):
                 'created_by': actor,
             },
         )
-        driver = User.objects.filter(role=Roles.DRIVER, phone='+996700900005').first()
-        vehicle, _ = Vehicle.objects.get_or_create(
-            plate_number='01KG777AAA',
-            defaults={
-                'vehicle_type': vtype,
-                'branch': branches['BIS'],
-                'brand': 'ГАЗ',
-                'model': 'Газель Next',
-                'year': 2022,
-                'max_weight': Decimal('5000'),
-                'max_volume': Decimal('30.000'),
-                'status': VehicleStatus.AVAILABLE,
-                'current_driver': driver,
-                'created_by': actor,
-            },
-        )
-        if driver is not None:
-            DriverProfile.objects.filter(user=driver).update(assigned_vehicle=vehicle)
-        self.stdout.write('  fleet: 1 тип ТС, 1 автомобиль (закреплён за водителем)')
+        for plate, phone in zip(VEHICLE_PLATES, DRIVER_PHONES, strict=True):
+            driver = User.objects.filter(role=Roles.DRIVER, phone=phone).first()
+            vehicle, _ = Vehicle.objects.get_or_create(
+                plate_number=plate,
+                defaults={
+                    'vehicle_type': vtype,
+                    'branch': branches['BIS'],
+                    'brand': 'ГАЗ',
+                    'model': 'Газель Next',
+                    'year': 2022,
+                    'max_weight': Decimal('5000'),
+                    'max_volume': Decimal('30.000'),
+                    'status': VehicleStatus.AVAILABLE,
+                    'current_driver': driver,
+                    'created_by': actor,
+                },
+            )
+            if driver is not None:
+                DriverProfile.objects.filter(user=driver, assigned_vehicle__isnull=True).update(
+                    assigned_vehicle=vehicle
+                )
+        self.stdout.write(f'  fleet: 1 тип ТС, {len(VEHICLE_PLATES)} автомобиля (по одному на водителя)')
 
-    def _seed_demo_order(self, actor, branches, services) -> None:
-        client = User.objects.filter(role=Roles.CLIENT, phone='+996700900777').first()
-        driver = User.objects.filter(role=Roles.DRIVER, phone='+996700900005').first()
-        if Shipment.objects.filter(shipment_number__startswith='SHP').exists() and client.orders.exists():
-            self.stdout.write('  demo order/shipment: уже есть, пропуск')
+    # -------------------------------------------------------------- scenarios
+    def _seed_scenarios(self, actor, branches, services, routes) -> None:
+        """Заказы и рейсы во всех статусах, которые проверяет приложение.
+
+        waiting_receive  — склад Бишкека принимает груз от клиента
+        in_warehouse     — лежит в ячейке склада
+        waiting_shipment — в рейсе READY, ждёт погрузки
+        in_transit       — едет, у рейса две отметки точек
+        arrived          — рейс прибыл в Ош, склад Оша разгружает
+        ready_for_pickup — рейс завершён, склад Оша выдаёт получателю
+        draft, damaged   — крайние состояния шкалы
+        """
+        if Order.objects.filter(comment__startswith=SCENARIO_MARK).exists():
+            self.stdout.write('  scenarios: уже есть, пропуск')
             return
 
+        client = User.objects.get(phone='+996700900777')
+        client2 = User.objects.get(phone='+996700900778')
+        drivers = [User.objects.get(phone=phone) for phone in DRIVER_PHONES]
+        vehicles = [Vehicle.objects.get(plate_number=plate) for plate in VEHICLE_PLATES]
+        cells = list(WarehouseCell.objects.filter(zone__warehouse__code='WH-BIS').order_by('code'))
+        route = routes['BIS-OSH']
+        ctx = {'actor': actor, 'branches': branches, 'services': services, 'cells': cells}
+
+        # Порядок важен: завершённый рейс освобождает машину и водителя
+        # для следующего, поэтому completed и arrived идут на одной паре.
+        pickup = self._order(ctx, client, 'выдача', [_box('Ящик №1', '22.0'), _box('Ящик №2', '21.5')])
+        self._to_warehouse(ctx, pickup, ready_for_shipment=True)
+        self._make_trip(ctx, route, drivers[2], vehicles[2], [pickup], ShipmentStatus.COMPLETED)
+
+        arrived = self._order(ctx, client2, 'прибыл', [_box('Сухофрукты, мешок', '40.0')])
+        self._to_warehouse(ctx, arrived, ready_for_shipment=True)
+        self._make_trip(ctx, route, drivers[2], vehicles[2], [arrived], ShipmentStatus.ARRIVED)
+
+        transit = self._order(
+            ctx, client, 'в пути', [_box('Телевизор 55"', '18.4', fragile=True), _box('Кронштейн', '3.2')]
+        )
+        self._to_warehouse(ctx, transit, ready_for_shipment=True)
+        self._make_trip(ctx, route, drivers[0], vehicles[0], [transit], ShipmentStatus.IN_TRANSIT, marks=2)
+
+        waiting_trip = self._order(ctx, client2, 'на погрузку', [_box('Мешок с текстилем', '8.0')])
+        self._to_warehouse(ctx, waiting_trip, ready_for_shipment=True)
+        self._make_trip(ctx, route, drivers[1], vehicles[1], [waiting_trip], ShipmentStatus.READY)
+
+        stored = self._order(ctx, client, 'склад', [_box('Коробка с запчастями', '12.5')])
+        self._to_warehouse(ctx, stored)
+
+        waiting = self._order(ctx, client, 'приём', [_box('Коробка с посудой', '6.3', fragile=True)])
+        self._advance(ctx, waiting, (*PAID_CHAIN, OrderStatus.WAITING_RECEIVE))
+
+        damaged = self._order(ctx, client, 'повреждён', [_box('Сервиз', '9.1', fragile=True)])
+        self._to_warehouse(ctx, damaged)
+        self._advance(ctx, damaged, (OrderStatus.DAMAGED,))
+
+        self._order(ctx, client, 'черновик', [_box('Сумка с одеждой', '4.2')])
+        self.stdout.write('  scenarios: 8 заказов, 4 рейса (ready, in_transit, arrived, completed)')
+
+    @staticmethod
+    def _order(ctx, client, title: str, packages: list[dict]) -> Order:
+        """Заказ Бишкек → Ош с QR на каждом месте (без QR груз не отсканировать)."""
+        actor, branches = ctx['actor'], ctx['branches']
         order = OrderService.create(
             actor=actor,
             client=client,
-            sender_name='Демо Отправитель',
-            sender_phone='+996700900777',
-            sender_address='Бишкек, ул. Чуй, 100',
-            receiver_name='Демо Получатель',
+            sender_name=client.full_name or 'Демо Отправитель',
+            sender_phone=client.phone,
+            sender_address='Бишкек, ул. Киевская, 95',
+            receiver_name=f'Получатель ({title})',
             receiver_phone='+996700900888',
-            receiver_address='Ош, ул. Ленина, 5',
+            receiver_address='Ош, ул. Масалиева, 32',
             from_branch=branches['BIS'],
             to_branch=branches['OSH'],
             payment_type=PaymentType.CASH,
             delivery_type=DeliveryType.BRANCH_PICKUP,
-            comment='Демо-заказ (seed_demo)',
-            packages=[
-                {
-                    'title': 'Коробка с документами',
-                    'weight': Decimal('3.500'),
-                    'length': 40,
-                    'width': 30,
-                    'height': 20,
-                    'declared_price': Decimal('5000'),
-                },
-                {
-                    'title': 'Хрупкий груз',
-                    'weight': Decimal('8.000'),
-                    'length': 60,
-                    'width': 40,
-                    'height': 40,
-                    'declared_price': Decimal('12000'),
-                    'fragile': True,
-                },
-            ],
-            services=services[:2],
+            comment=f'{SCENARIO_MARK}: {title} (seed_demo)',
+            packages=packages,
+            services=ctx['services'][:1],
         )
         for package in order.packages.all():
             PackageService.generate_qr(actor=actor, package=package)
+        return order
 
-        # Проводим заказ по FSM до готовности к отправке (склад → рейс).
-        # Актор — суперадмин, входит во все ролевые наборы переходов.
-        for to_status in (
-            OrderStatus.WAITING_CONFIRMATION,
-            OrderStatus.CONFIRMED,
-            OrderStatus.WAITING_PAYMENT,
-            OrderStatus.PAID,
-            OrderStatus.WAITING_RECEIVE,
-            OrderStatus.RECEIVED,
-            OrderStatus.IN_WAREHOUSE,
-            OrderStatus.WAITING_SHIPMENT,
-        ):
-            order = OrderTransitionService.change(order=order, to_status=to_status, actor=actor)
+    @staticmethod
+    def _advance(ctx, order: Order, statuses) -> Order:
+        # Сервис меняет заблокированную копию — держим переданный объект в актуальном
+        # статусе: грузы ссылаются на него же (package.order) при синхронизации склада.
+        for to_status in statuses:
+            order.refresh_from_db()
+            OrderTransitionService.change(order=order, to_status=to_status, actor=ctx['actor'])
+        order.refresh_from_db()
+        return order
 
-        vehicle = Vehicle.objects.filter(plate_number='01KG777AAA').first()
+    def _to_warehouse(self, ctx, order: Order, *, ready_for_shipment: bool = False) -> None:
+        """Приём → проверка → размещение в ячейку склада Бишкека.
+
+        Приём и проверку проводим переходами (реальный приём требует фото),
+        размещение — складским сервисом: он ведёт заполненность ячеек и сам
+        переводит заказ в IN_WAREHOUSE.
+        """
+        actor, cells = ctx['actor'], ctx['cells']
+        self._advance(ctx, order, (*PAID_CHAIN, OrderStatus.WAITING_RECEIVE, OrderStatus.RECEIVED))
+        for package in order.packages.all():
+            for to_status in (PackageStatus.RECEIVED, PackageStatus.CHECKED):
+                PackageTransitionService.change(package=package, to_status=to_status, actor=actor)
+            cell = cells[Package.objects.filter(current_cell__isnull=False).count() % len(cells)]
+            WarehouseOperationsService.store(actor=actor, package=package, cell=cell, reason='seed_demo')
+        if ready_for_shipment:
+            self._advance(ctx, order, (OrderStatus.WAITING_SHIPMENT,))
+
+    @staticmethod
+    def _make_trip(ctx, route, driver, vehicle, orders, target: str, *, marks: int | None = None) -> Shipment:
+        """Рейс Бишкек → Ош, доведённый до target реальными операциями.
+
+        marks — сколько первых точек маршрута отметить (по умолчанию после
+        прибытия отмечены все, в пути — ни одной).
+        """
+        actor, branches = ctx['actor'], ctx['branches']
         shipment = ShipmentService.create(
             actor=actor,
             departure_branch=branches['BIS'],
             arrival_branch=branches['OSH'],
+            route=route,
+            vehicle=vehicle,
+            driver=driver,
+            planned_departure=timezone.now() + timedelta(hours=3),
         )
-        if vehicle is not None:
-            ShipmentService.assign_vehicle(actor=actor, shipment=shipment, vehicle=vehicle)
-        ShipmentService.assign_driver(actor=actor, shipment=shipment, driver=driver)
-        # Груз проходит склад (приём → проверка → размещение) перед погрузкой
-        for package in order.packages.all():
-            for pkg_status in (
-                PackageStatus.RECEIVED,
-                PackageStatus.CHECKED,
-                PackageStatus.STORED,
-            ):
-                PackageTransitionService.change(package=package, to_status=pkg_status, actor=actor)
-        ShipmentService.add_order(actor=actor, shipment=shipment, order=order)
-        # PLANNED делает рейс «активным» — заказ показывает active_shipment
-        ShipmentTransitionService.change(shipment=shipment, to_status=ShipmentStatus.PLANNED, actor=actor)
-        self.stdout.write(
-            f'  demo order {order.order_number} (QR готовы) + рейс {shipment.shipment_number} на водителя'
+        for order in orders:
+            ShipmentService.add_order(actor=actor, shipment=shipment, order=order)
+
+        def transition(to_status):
+            return ShipmentTransitionService.change(shipment=shipment, to_status=to_status, actor=actor)
+
+        shipment = transition(ShipmentStatus.PLANNED)
+        shipment = transition(ShipmentStatus.READY)
+        if target == ShipmentStatus.READY:
+            return shipment
+
+        shipment = transition(ShipmentStatus.LOADING)
+        for item in shipment.items.select_related('package'):
+            ShipmentService.load_package(actor=actor, shipment=shipment, qr_code=item.package.qr_code)
+        shipment = ShipmentService.finish_loading(actor=actor, shipment=shipment)
+        shipment = ShipmentService.start(actor=driver, shipment=Shipment.objects.get(id=shipment.id))
+
+        points = list(route.points.order_by('sequence'))
+        count = marks if marks is not None else len(points)
+        if target == ShipmentStatus.IN_TRANSIT:
+            Command._mark_checkpoints(shipment, driver, points[:count])
+            return shipment
+
+        Command._mark_checkpoints(shipment, driver, points[:count])
+        shipment = ShipmentService.arrive(actor=driver, shipment=shipment)
+        if target == ShipmentStatus.ARRIVED:
+            return shipment
+
+        shipment = transition(ShipmentStatus.UNLOADING)
+        for item in shipment.items.select_related('package'):
+            ShipmentService.unload_package(actor=actor, shipment=shipment, qr_code=item.package.qr_code)
+        return ShipmentService.finish(actor=actor, shipment=shipment)
+
+    @staticmethod
+    def _mark_checkpoints(shipment, driver, points) -> None:
+        """Пройденные точки маршрута — клиент видит их в трекинге заказа."""
+        now = timezone.now()
+        for index, point in enumerate(points):
+            ShipmentCheckpointService.mark(
+                actor=driver,
+                shipment=shipment,
+                client_id=uuid.uuid4(),
+                route_point_id=point.id,
+                reached_at=now - timedelta(hours=2 * (len(points) - index)),
+                comment='Заправка, 15 минут' if index == 1 else '',
+            )
+
+    # ---------------------------------------------------------------- summary
+    def _print_summary(self) -> None:
+        """Учётки, QR-коды и рейсы: без них приложение нечем проверить."""
+        self.stdout.write(self.style.SUCCESS(f'\n=== Учётки (пароль {DEMO_PASSWORD}) ==='))
+        for role, phone, first, last in DEMO_USERS:
+            self.stdout.write(f'  {role:10s} {phone}  {last} {first}')
+
+        self.stdout.write(self.style.SUCCESS('\n=== QR-коды грузов (для сканера) ==='))
+        packages = (
+            Package.objects.select_related('order')
+            .filter(order__comment__startswith=SCENARIO_MARK)
+            .exclude(qr_code='')
+            .order_by('created_at')
         )
+        for package in packages:
+            self.stdout.write(
+                f'  {package.qr_code}  {package.order.order_number}  '
+                f'{package.status:16s} {package.title}'
+            )
+
+        self.stdout.write(self.style.SUCCESS('\n=== Рейсы ==='))
+        shipments = Shipment.objects.select_related('driver', 'route').filter(
+            driver__phone__in=DRIVER_PHONES
+        )
+        for shipment in shipments.order_by('created_at'):
+            self.stdout.write(
+                f'  {shipment.shipment_number}  {shipment.status:12s} '
+                f'маршрут={shipment.route.code if shipment.route else "—"}  '
+                f'водитель={shipment.driver.phone}  отметок={shipment.checkpoints.count()}'
+            )
 
     # ------------------------------------------------------------------- wipe
     def _wipe(self) -> None:

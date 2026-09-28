@@ -1,6 +1,6 @@
 """Селекторы shipments: водитель видит только свои рейсы (ТЗ, раздел 14)."""
 
-from django.db.models import QuerySet
+from django.db.models import Q, QuerySet
 
 from apps.shipments.models import Shipment
 from apps.users.choices import Roles
@@ -20,4 +20,11 @@ class ShipmentSelector:
             return queryset.filter(driver=user)
         if user.role == Roles.CLIENT:
             return queryset.none()
+        if user.role == Roles.WAREHOUSE:
+            # Склад видит рейсы своего филиала (отправление или прибытие);
+            # без филиала в профиле — все, как раньше
+            profile = getattr(user, 'employee_profile', None)
+            branch_id = getattr(profile, 'branch_id', None)
+            if branch_id:
+                return queryset.filter(Q(departure_branch_id=branch_id) | Q(arrival_branch_id=branch_id))
         return queryset

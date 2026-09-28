@@ -31,3 +31,12 @@ class CanDriveShipment(RolePermission):
 
 class CanReportIncident(RolePermission):
     allowed_roles = (Roles.SUPERADMIN, Roles.DIRECTOR, Roles.OPERATOR, Roles.DRIVER)
+
+
+class CanMarkCheckpoint(RolePermission):
+    """Отметку точки ставит водитель рейса; оператор — за него по телефону.
+
+    Принадлежность рейса водителю проверяет сервис.
+    """
+
+    allowed_roles = (Roles.SUPERADMIN, Roles.DIRECTOR, Roles.OPERATOR, Roles.DRIVER)

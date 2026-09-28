@@ -23,8 +23,14 @@ CLIENT_ORDER_EVENTS = frozenset(
     }
 )
 
+# Водитель отметил точку маршрута: уведомляем клиентов всех заказов рейса
+CHECKPOINT_EVENT = 'shipment.checkpoint_reached'
+
 
 def handle_event(event: events.Event) -> None:
+    if event.type == CHECKPOINT_EVENT:
+        _handle_checkpoint(event)
+        return
     if event.type not in CLIENT_ORDER_EVENTS:
         return
     from apps.notifications.choices import NotificationType
@@ -44,6 +50,26 @@ def handle_event(event: events.Event) -> None:
         },
         channels=(NotificationType.IN_APP, NotificationType.PUSH),
     )
+
+
+def _handle_checkpoint(event: events.Event) -> None:
+    from apps.notifications.choices import NotificationType
+    from apps.notifications.services import NotificationService
+    from apps.orders.models import Order
+
+    city = event.payload.get('city_name', '')
+    orders = Order.objects.select_related('client').filter(id__in=event.payload.get('order_ids', []))
+    for order in orders:
+        NotificationService.create(
+            user=order.client,
+            event_type=event.type,
+            context={
+                'client': order.client.full_name or order.client.phone,
+                'order': order.order_number,
+                'city': city,
+            },
+            channels=(NotificationType.IN_APP, NotificationType.PUSH),
+        )
 
 
 def register() -> None:

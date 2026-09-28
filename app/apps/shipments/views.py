@@ -4,6 +4,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
+from apps.common.exceptions import PermissionException
 from apps.common.idempotency import idempotent
 from apps.common.permissions import ActionPermissionsMixin
 from apps.shipments import permissions as shipment_permissions
@@ -14,12 +15,18 @@ from apps.shipments.serializers import (
     IncidentCreateSerializer,
     IncidentSerializer,
     OrderRefSerializer,
+    ShipmentCheckpointCreateSerializer,
+    ShipmentCheckpointSerializer,
     ShipmentCreateSerializer,
     ShipmentScanSerializer,
     ShipmentSerializer,
     ShipmentStatusHistorySerializer,
 )
-from apps.shipments.services import ShipmentService, ShipmentTransitionService
+from apps.shipments.services import (
+    ShipmentCheckpointService,
+    ShipmentService,
+    ShipmentTransitionService,
+)
 
 
 def _order(order_id):
@@ -62,6 +69,8 @@ class ShipmentViewSet(ActionPermissionsMixin, ModelViewSet):
         'unload_package': (shipment_permissions.CanLoadShipment,),
         'finish': (shipment_permissions.CanLoadShipment,),
         'incidents': (shipment_permissions.CanReportIncident,),
+        # GET — всем, кто видит рейсы; POST проверяется в самом action
+        'checkpoints': (shipment_permissions.CanViewShipments,),
     }
 
     def get_queryset(self):
@@ -239,6 +248,43 @@ class ShipmentViewSet(ActionPermissionsMixin, ModelViewSet):
             longitude=data['longitude'],
         )
         return Response(IncidentSerializer(incident).data, status=status.HTTP_201_CREATED)
+
+    @extend_schema(
+        request=ShipmentCheckpointCreateSerializer,
+        responses={200: ShipmentCheckpointSerializer, 201: ShipmentCheckpointSerializer},
+        summary='Отметки точек маршрута (GET список, POST отметить)',
+        description=(
+            'GET — отметки рейса по reached_at по возрастанию, без пагинации. '
+            'POST — водитель рейса отмечает точку маршрута: 201 — создана, '
+            '200 — повтор (тот же client_id или уже отмеченная точка), ошибкой не считается.'
+        ),
+    )
+    @action(detail=True, methods=['get', 'post'])
+    def checkpoints(self, request, pk=None):
+        shipment = self.get_object()
+        if request.method == 'GET':
+            checkpoints = shipment.checkpoints.select_related('route_point__city')
+            return Response(ShipmentCheckpointSerializer(checkpoints, many=True).data)
+
+        if not shipment_permissions.CanMarkCheckpoint().has_permission(request, self):
+            raise PermissionException('Отметки точек ставит водитель рейса.')
+        serializer = ShipmentCheckpointCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        checkpoint, created = ShipmentCheckpointService.mark(
+            actor=request.user,
+            shipment=shipment,
+            client_id=data['client_id'],
+            route_point_id=data['route_point'],
+            reached_at=data['reached_at'],
+            comment=data['comment'],
+            latitude=data['latitude'],
+            longitude=data['longitude'],
+        )
+        return Response(
+            ShipmentCheckpointSerializer(checkpoint).data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
 
     @extend_schema(responses=ShipmentStatusHistorySerializer(many=True), summary='История статусов')
     @action(detail=True, methods=['get'])
