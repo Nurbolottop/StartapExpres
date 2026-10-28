@@ -170,6 +170,7 @@ REST_FRAMEWORK = {
         'driver': '10000/day',
         'auth': '10/min',
         'gps': '12/min',
+        'refresh': '1000/day',
     },
     'DEFAULT_SCHEMA_CLASS': 'apps.common.schema.RussianAutoSchema',
     'EXCEPTION_HANDLER': 'apps.common.exceptions.exception_handler',

@@ -10,6 +10,7 @@
 
 Запуск:
     cd app && DJANGO_SETTINGS_MODULE=core.settings.dev python manage.py seed_demo
+    ...              python manage.py seed_demo --reset-scenarios   # пересоздать заказы и рейсы
     ...              python manage.py seed_demo --wipe   # снести демо-данные
 
 Пароль всех тестовых учёток — Passw0rd!Demo (12+ символов, сложность ок).
@@ -20,10 +21,13 @@ from datetime import time, timedelta
 from decimal import Decimal
 
 from django.core.management.base import BaseCommand
-from django.db import transaction
+from django.db import models, transaction
+from django.db.models import F, Q, Sum
 from django.utils import timezone
 
 from apps.branches.models import Branch, City
+from apps.finance.models import Cashbox, Transaction
+from apps.notifications.models import Notification
 from apps.orders.choices import DeliveryType, OrderStatus, PaymentType
 from apps.orders.services import OrderService
 from apps.orders.transitions import OrderTransitionService
@@ -41,7 +45,7 @@ from apps.shipments.services import (
     ShipmentTransitionService,
 )
 from apps.tariffs.models import AdditionalService, Tariff
-from apps.users.choices import Roles
+from apps.users.choices import DriverStatus, Roles
 from apps.users.models import DriverProfile, EmployeeProfile, User
 from apps.users.services import UserService
 from apps.vehicles.choices import VehicleStatus
@@ -122,6 +126,11 @@ class Command(BaseCommand):
             action='store_true',
             help='Снести демо-данные (по демо-кодам/телефонам) вместо создания.',
         )
+        parser.add_argument(
+            '--reset-scenarios',
+            action='store_true',
+            help='Удалить демо-заказы и рейсы (вместе с действиями ревьюера) и создать заново.',
+        )
 
     def handle(self, *args, **options):
         if options['wipe']:
@@ -137,6 +146,8 @@ class Command(BaseCommand):
             services = self._seed_services(actor)
             self._seed_warehouses(actor, branches)
             self._seed_fleet(actor, branches)
+            if options['reset_scenarios']:
+                self._reset_scenarios()
             self._seed_scenarios(actor, branches, services, routes)
         self._print_summary()
         self.stdout.write(self.style.SUCCESS('Демо-данные готовы. Пароль учёток: ' + DEMO_PASSWORD))
@@ -424,6 +435,80 @@ class Command(BaseCommand):
         self._order(ctx, client, 'черновик', [_box('Сумка с одеждой', '4.2')])
         self.stdout.write('  scenarios: 8 заказов, 4 рейса (ready, in_transit, arrived, completed)')
 
+    def _reset_scenarios(self) -> None:
+        """Возвращает сценарии в исходное состояние перед отправкой в стор.
+
+        Ревьюер выдаёт грузы, отменяет заказы и завершает рейсы, а повторный
+        запуск без флага сценарии не трогает (есть SCENARIO_MARK). Сносим
+        заказы с маркером и все заказы демо-клиентов, рейсы демо-водителей и
+        машин; ячейки, кассы, машины и водителей возвращаем в исходное.
+        """
+        client_phones = [phone for role, phone, _, _ in DEMO_USERS if role == Roles.CLIENT]
+        order_ids = list(
+            Order.all_objects.filter(
+                Q(comment__startswith=SCENARIO_MARK) | Q(client__phone__in=client_phones)
+            ).values_list('id', flat=True)
+        )
+        shipment_ids = list(
+            Shipment.all_objects.filter(
+                Q(driver__phone__in=DRIVER_PHONES)
+                | Q(vehicle__plate_number__in=VEHICLE_PLATES)
+                | Q(items__order_id__in=order_ids)
+            )
+            .values_list('id', flat=True)
+            .distinct()
+        )
+        cell_ids = set(
+            Package.all_objects.filter(order_id__in=order_ids, current_cell__isnull=False).values_list(
+                'current_cell_id', flat=True
+            )
+        )
+        # Транзакции знаковые (возврат — минус): удаляя их, откатываем баланс касс
+        cash_deltas = (
+            Transaction.all_objects.filter(payment__order_id__in=order_ids)
+            .values('cashbox_id')
+            .annotate(total=Sum('amount'))
+        )
+        cash_deltas = {row['cashbox_id']: row['total'] for row in cash_deltas}
+
+        self._purge(Shipment, shipment_ids)
+        self._purge(Order, order_ids)
+
+        for cell in WarehouseCell.objects.filter(id__in=cell_ids):
+            occupied = Package.objects.filter(current_cell=cell).aggregate(
+                weight=Sum('weight'), volume=Sum('volume')
+            )
+            cell.occupied_weight = occupied['weight'] or 0
+            cell.occupied_volume = occupied['volume'] or 0
+            cell.save(update_fields=['occupied_weight', 'occupied_volume', 'updated_at'])
+        for cashbox_id, total in cash_deltas.items():
+            Cashbox.objects.filter(id=cashbox_id).update(balance=F('balance') - total)
+        Vehicle.objects.filter(plate_number__in=VEHICLE_PLATES).update(status=VehicleStatus.AVAILABLE)
+        DriverProfile.objects.filter(user__phone__in=DRIVER_PHONES).update(status=DriverStatus.AVAILABLE)
+        # Уведомления ссылались на удалённые заказы — в ленте ревьюера им не место
+        demo_phones = [phone for _, phone, _, _ in DEMO_USERS]
+        Notification.all_objects.filter(user__phone__in=demo_phones).hard_delete()
+        self.stdout.write(f'  reset: удалено заказов {len(order_ids)}, рейсов {len(shipment_ids)}')
+
+    @classmethod
+    def _purge(cls, model, ids) -> None:
+        """Физически удаляет записи и всё, что на них ссылается (PROTECT тоже).
+
+        Зависимые удаляются первыми, включая soft-deleted. _base_manager —
+        обычный QuerySet: delete() удаляет строки, а не помечает is_deleted.
+        """
+        if not ids:
+            return
+        for rel in model._meta.related_objects:
+            if getattr(rel, 'on_delete', None) not in (models.CASCADE, models.PROTECT, models.RESTRICT):
+                continue
+            related = rel.related_model
+            dependent_ids = list(
+                related._base_manager.filter(**{f'{rel.field.name}__in': ids}).values_list('pk', flat=True)
+            )
+            cls._purge(related, dependent_ids)
+        model._base_manager.filter(pk__in=ids).delete()
+
     @staticmethod
     def _order(ctx, client, title: str, packages: list[dict]) -> Order:
         """Заказ Бишкек → Ош с QR на каждом месте (без QR груз не отсканировать)."""
@@ -556,14 +641,11 @@ class Command(BaseCommand):
         )
         for package in packages:
             self.stdout.write(
-                f'  {package.qr_code}  {package.order.order_number}  '
-                f'{package.status:16s} {package.title}'
+                f'  {package.qr_code}  {package.order.order_number}  ' f'{package.status:16s} {package.title}'
             )
 
         self.stdout.write(self.style.SUCCESS('\n=== Рейсы ==='))
-        shipments = Shipment.objects.select_related('driver', 'route').filter(
-            driver__phone__in=DRIVER_PHONES
-        )
+        shipments = Shipment.objects.select_related('driver', 'route').filter(driver__phone__in=DRIVER_PHONES)
         for shipment in shipments.order_by('created_at'):
             self.stdout.write(
                 f'  {shipment.shipment_number}  {shipment.status:12s} '

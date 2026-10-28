@@ -38,6 +38,7 @@ REST_FRAMEWORK = {
         'driver': '10000/min',
         'auth': '10000/min',
         'gps': '10000/min',
+        'refresh': '10000/min',
     },
 }
 

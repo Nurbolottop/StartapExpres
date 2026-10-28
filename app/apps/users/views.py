@@ -8,6 +8,7 @@ from rest_framework.viewsets import ModelViewSet
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from apps.common.permissions import ActionPermissionsMixin
+from apps.common.throttling import RefreshTokenThrottle
 from apps.users import permissions as users_permissions
 from apps.users.choices import Roles
 from apps.users.filters import UserFilter
@@ -70,6 +71,8 @@ class LoginView(APIView):
 
 class RefreshView(TokenRefreshView):
     """Обновление access-токена (simplejwt, rotation + blacklist)."""
+
+    throttle_classes = (RefreshTokenThrottle,)
 
     def post(self, request, *args, **kwargs):
         old_refresh = request.data.get('refresh', '')

@@ -120,6 +120,21 @@ class TestTokens:
         assert old_reuse.status_code == 401
         assert session.refresh_jti
 
+    def test_refresh_throttled_per_user_not_per_ip(self, api_client, monkeypatch):
+        from apps.common.throttling import RefreshTokenThrottle
+
+        monkeypatch.setattr(RefreshTokenThrottle, 'rate', '2/day', raising=False)
+        first, second = UserFactory(), UserFactory()
+        refresh = api_client.post(LOGIN_URL, {'phone': first.phone, 'password': DEFAULT_PASSWORD}).json()
+        for _ in range(2):
+            refresh = api_client.post(REFRESH_URL, {'refresh': refresh['data']['refresh']}).json()
+        blocked = api_client.post(REFRESH_URL, {'refresh': refresh['data']['refresh']})
+        other = api_client.post(LOGIN_URL, {'phone': second.phone, 'password': DEFAULT_PASSWORD}).json()
+        same_ip = api_client.post(REFRESH_URL, {'refresh': other['data']['refresh']})
+
+        assert blocked.status_code == 429
+        assert same_ip.status_code == 200
+
     def test_logout_blacklists_and_closes_session(self, api_client, auth_client):
         user = UserFactory()
         login = api_client.post(LOGIN_URL, {'phone': user.phone, 'password': DEFAULT_PASSWORD}).json()
